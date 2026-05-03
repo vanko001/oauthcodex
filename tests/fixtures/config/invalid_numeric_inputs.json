@@ -1,0 +1,7 @@
+{
+  "codex_auto_refresh_minutes": -1,
+  "codex_startup_wakeup_delay_seconds": 0,
+  "codex_auto_switch_primary_threshold": -5,
+  "codex_auto_switch_secondary_threshold": 120,
+  "codex_quota_alert_primary_threshold": 999
+}

@@ -1,0 +1,23 @@
+{
+  "id": "acct_oauth_pro_001",
+  "provider": "codex",
+  "auth_mode": "oauth",
+  "email": "developer@example.com",
+  "plan_type": "pro",
+  "account_id": "acct_1234567890abc",
+  "organization_id": "org_9876543210fed",
+  "organizations": ["developer"],
+  "display_name": "Developer Pro",
+  "tags": ["work", "primary"],
+  "tokens": {
+    "access_token": "at_access_token_value_success_abc123",
+    "refresh_token": "rt_refresh_token_value_success_def456",
+    "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2F1dGgub3BlbmFpLmNvbS8iLCJzdWIiOiJhdXRoMHx1c2VyX2FiYzEyM2RlZjQ1NiIsImF1ZCI6IlUyQmNtcUxxRndzRnBNazhUNXI1R3FWcVZCRng1UmtQIiwiZXhwIjoxNzQ2Mjg5NjAwLCJpYXQiOjE3NDYyODkyMDAsImVtYWlsIjoiZGV2ZWxvcGVyQGV4YW1wbGUuY29tIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFjY291bnRfaWQiOiJhY2N0XzEyMzQ1Njc4OTBhYmMiLCJvcmdhbml6YXRpb25faWQiOiJvcmdfOTg3NjU0MzIxMGZlZCIsInBsYW5fdHlwZSI6InBybyIsIm9yZ2FuaXphdGlvbnMiOlsiZGV2ZWxvcGVyIl19fQ.mock_signature_base64url",
+    "token_type": "Bearer",
+    "expires_at": "2026-05-03T13:05:00Z"
+  },
+  "quota": null,
+  "created_at": "2026-04-01T08:00:00Z",
+  "last_used": "2026-05-03T12:00:00Z",
+  "last_refresh": "2026-05-03T12:05:00Z"
+}

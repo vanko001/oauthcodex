@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "current_account_id": "acct_oauth_pro_001",
+  "accounts": [
+    {
+      "id": "acct_oauth_pro_001",
+      "email": "developer@example.com",
+      "plan_type": "pro",
+      "display_name": "Developer Pro",
+      "tags": ["work", "primary"]
+    },
+    {
+      "id": "acct_apikey_openai_003",
+      "email": null,
+      "plan_type": null,
+      "display_name": "OpenAI API Key",
+      "tags": ["api-key"]
+    }
+  ]
+}

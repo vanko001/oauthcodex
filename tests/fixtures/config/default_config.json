@@ -1,0 +1,19 @@
+{
+  "codex_auto_refresh_minutes": 30,
+  "codex_startup_wakeup_enabled": true,
+  "codex_startup_wakeup_delay_seconds": 10,
+  "codex_app_path": "/Applications/Codex.app",
+  "codex_specified_app_path": null,
+  "codex_launch_on_switch": true,
+  "codex_restart_specified_app_on_switch": false,
+  "codex_local_access_entry_visible": true,
+  "codex_auto_switch_enabled": true,
+  "codex_auto_switch_primary_threshold": 80,
+  "codex_auto_switch_secondary_threshold": 90,
+  "codex_quota_alert_enabled": true,
+  "codex_quota_alert_primary_threshold": 70,
+  "codex_quota_alert_secondary_threshold": 85,
+  "codex_quota_alert_cooldown_minutes": 60,
+  "other_provider_field": "should_be_preserved",
+  "generic_settings_flag": true
+}

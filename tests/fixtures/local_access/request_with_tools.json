@@ -1,0 +1,31 @@
+{
+  "method": "POST",
+  "path": "/v1/chat/completions",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer sk-local-mock-key-abc123def456"
+  },
+  "body": {
+    "model": "gpt-4o",
+    "messages": [
+      {"role": "user", "content": "What is the weather?"}
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "Get the current weather in a given location",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "location": {"type": "string", "description": "The city name"}
+            },
+            "required": ["location"]
+          }
+        }
+      }
+    ],
+    "stream": true
+  }
+}

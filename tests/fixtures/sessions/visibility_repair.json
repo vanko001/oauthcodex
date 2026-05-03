@@ -1,0 +1,16 @@
+{
+  "visibility_issues": [
+    {
+      "session_id": "sess_abc123_codex_default",
+      "issue": "missing_from_index",
+      "found_in_backup": true,
+      "backup_path": "/Users/vanko/.codex/backups/sessions_2026-05-02/sess_abc123.json"
+    }
+  ],
+  "repair_result": {
+    "restored_count": 1,
+    "backup_created": true,
+    "backup_path": "/Users/vanko/.codex/backups/repair_2026-05-03T120000/",
+    "errors": []
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "resp_mock_chat_completion_001",
+  "object": "chat.completion",
+  "created": 1746277200,
+  "model": "gpt-4o-2024-05-13",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Here is a Rust function that adds two numbers:\n\n```rust\nfn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n\nfn main() {\n    let result = add(5, 3);\n    println!(\"5 + 3 = {}\", result);\n}\n```"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 30,
+    "completion_tokens": 80,
+    "total_tokens": 110
+  }
+}

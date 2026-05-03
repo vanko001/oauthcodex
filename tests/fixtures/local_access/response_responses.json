@@ -1,0 +1,24 @@
+{
+  "id": "resp_mock_responses_001",
+  "object": "response",
+  "created_at": 1746277200,
+  "model": "gpt-4o-2024-05-13",
+  "output": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Here is a Rust function that adds two numbers:\n\n```rust\nfn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n```"
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 25,
+    "output_tokens": 60,
+    "total_tokens": 85
+  },
+  "status": "completed"
+}

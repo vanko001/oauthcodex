@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "rate_limited",
+    "message": "Too many requests",
+    "timestamp": "2026-05-03T12:00:00Z",
+    "status_code": 429
+  },
+  "retry_after_ms": 5000
+}

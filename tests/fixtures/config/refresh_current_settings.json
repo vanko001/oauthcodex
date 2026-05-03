@@ -1,0 +1,6 @@
+{
+  "codex_auto_refresh_minutes": -1,
+  "current_account_refresh_minutes_map": {
+    "codex": 5
+  }
+}

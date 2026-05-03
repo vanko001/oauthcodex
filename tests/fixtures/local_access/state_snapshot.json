@@ -1,0 +1,35 @@
+{
+  "enabled": true,
+  "running": false,
+  "port": 0,
+  "base_url": "http://localhost:0",
+  "account_count": 1,
+  "last_error": null,
+  "local_api_key": "sk-local-mock-key-abc123def456",
+  "stats": {
+    "daily": {
+      "requests": 0,
+      "successes": 0,
+      "failures": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_ms_sum": 0
+    },
+    "weekly": {
+      "requests": 0,
+      "successes": 0,
+      "failures": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_ms_sum": 0
+    },
+    "monthly": {
+      "requests": 0,
+      "successes": 0,
+      "failures": 0,
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "latency_ms_sum": 0
+    }
+  }
+}

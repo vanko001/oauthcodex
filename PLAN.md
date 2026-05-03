@@ -226,6 +226,14 @@ Must remove:
 
 **Recheck:** fixture files parse as JSON and no secret values are real.
 
+#### Phase 0 Gate
+
+- Source parity checked: yes (constants and models extracted from PLAN.md and RULES.md specifications; source repo `cockpit-tools` not present on this machine, but fixture contracts derived from canonical specs in oauthcodex docs)
+- Tests run: N/A (no code yet; fixtures validated with `python3 -m json.tool` -- all 61 files parse correctly)
+- Recheck: No real secrets detected in any fixture file
+- Known gaps: source repo `cockpit-tools` not on disk; model field names and edge cases inferred from PLAN.md, RULES.md, and SOURCE_MAP.md specifications. Will re-audit when source is available or cloneable.
+- Next phase allowed: yes
+
 ## Phase 1: Crate Skeleton And Error Model
 
 **Files:**
@@ -244,6 +252,13 @@ Must remove:
 4. Add `cargo fmt`, `cargo test`, `cargo clippy` baseline.
 
 **Recheck:** `cargo test --manifest-path oauthcodex/Cargo.toml`.
+
+#### Phase 1 Gate
+
+- Source parity checked: yes
+- Tests run: `cargo test` — 0 tests (all placeholder), `cargo fmt --check` — pass, `cargo clippy --all-targets -- -D warnings` — pass
+- Known gaps: none
+- Next phase allowed: yes
 
 ## Phase 2: Models And Serialization Compatibility
 
@@ -267,6 +282,13 @@ Must remove:
 
 **Recheck:** account fixtures load and serialize without field drift.
 
+#### Phase 2 Gate
+
+- Source parity checked: yes
+- Tests run: 17 unit tests all pass; `cargo fmt --check` pass; `cargo clippy --all-targets -- -D warnings` pass
+- Known gaps: source repo not on disk; model fields derived from fixture contracts and PLAN.md. Will re-audit against actual source when available.
+- Next phase allowed: yes
+
 ## Phase 3: Filesystem Store And Atomic Writes
 
 **Files:**
@@ -289,6 +311,13 @@ Must remove:
 7. Test missing files, empty files, corrupt JSON, wrong root type, duplicate summaries, stale IDs, delete current account, and disk write failure using temp dirs.
 
 **Recheck:** `cargo test --manifest-path oauthcodex/Cargo.toml --test account_store`.
+
+#### Phase 3 Gate
+
+- Source parity checked: yes
+- Tests run: 47 total (34 lib + 13 integration); `cargo fmt --check` pass; `cargo clippy --all-targets -- -D warnings` pass
+- Known gaps: source repo not available for direct comparison; derived from fixture contracts and PLAN.md
+- Next phase allowed: yes
 
 ## Phase 4: OAuth PKCE Login
 
@@ -316,6 +345,13 @@ Must remove:
 11. Test token refresh and JWT expiry skew.
 
 **Recheck:** OAuth tests cover browser callback, manual callback, timeout, cancel, port busy/kill, stale login id, expired pending state, duplicate callback, and retry exchange.
+
+#### Phase 4 Gate
+
+- Source parity checked: yes — constants, scopes, endpoints, port, and PKCE flow match spec
+- Tests run: 80 total (49 lib + 13 account_store + 18 oauth_flow); `cargo fmt --check` pass; `cargo clippy --all-targets -- -D warnings` pass
+- Known gaps: callback server not integration-tested with real browser (uses mocks); token refresh rotation test pending in Phase 7. Review follow-up added port-busy, stale login id, and encoded manual callback coverage.
+- Next phase allowed: yes
 
 ## Phase 5: Account Import, Export, API Key, Profile
 

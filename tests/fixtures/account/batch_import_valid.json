@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "accounts": [
+    {
+      "id": "acct_import_oauth_001",
+      "provider": "codex",
+      "auth_mode": "oauth",
+      "email": "imported@example.com",
+      "plan_type": "team",
+      "account_id": "acct_imported_team_001",
+      "organization_id": "org_imported",
+      "display_name": "Imported Team Account",
+      "tags": ["imported", "team"],
+      "tokens": {
+        "access_token": "at_imported_access_token_abc",
+        "refresh_token": "rt_imported_refresh_token_def",
+        "id_token": "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJpbXBvcnRlZCJ9.mock"
+      },
+      "created_at": "2026-03-01T08:00:00Z",
+      "last_used": null,
+      "last_refresh": null
+    }
+  ]
+}

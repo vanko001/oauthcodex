@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "accounts": [],
+  "port": 0,
+  "enabled": false,
+  "local_api_key": "sk-local-mock-key-empty-collection",
+  "restrict_free_accounts": false,
+  "routing_strategy": "auto"
+}

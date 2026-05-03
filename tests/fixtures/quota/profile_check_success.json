@@ -1,0 +1,8 @@
+{
+  "account_id": "acct_1234567890abc",
+  "email": "developer@example.com",
+  "plan_type": "pro",
+  "organization_id": "org_9876543210fed",
+  "organizations": ["developer"],
+  "subscription_expires_at": "2027-04-01T00:00:00Z"
+}

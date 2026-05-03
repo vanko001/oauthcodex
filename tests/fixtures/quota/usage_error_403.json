@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "forbidden",
+    "message": "Access denied to usage API",
+    "timestamp": "2026-05-03T12:00:00Z",
+    "status_code": 403
+  },
+  "retry_after_ms": null
+}

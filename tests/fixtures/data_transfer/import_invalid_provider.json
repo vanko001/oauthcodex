@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "export_type": "codex_only",
+  "account_refs": ["acct_oauth_pro_001"],
+  "codex_account_groups": [],
+  "codex_model_providers": [
+    {
+      "id": "cmp_import_invalid",
+      "name": "",
+      "base_url": "not-a-valid-url",
+      "api_keys": [{"id": "bad_key", "key": ""}]
+    }
+  ],
+  "codex_wakeup_state": null,
+  "codex_instance_stores": null,
+  "current_account_refresh_map": {}
+}

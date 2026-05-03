@@ -1,0 +1,21 @@
+{
+  "account_id": "acct_norefresh001",
+  "plan_type": "free",
+  "windows": [
+    {
+      "type": "primary",
+      "limit": 50,
+      "used": 48,
+      "percentage": 96.0,
+      "reset_at": "2026-05-04T00:00:00Z",
+      "label": "daily",
+      "presence": true
+    }
+  ],
+  "code_review_quota": null,
+  "raw_data": {
+    "usage": {
+      "primary_window": {"limit": 50, "used": 48, "reset": "2026-05-04T00:00:00Z"}
+    }
+  }
+}

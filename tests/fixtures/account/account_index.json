@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "current_account_id": "acct_oauth_pro_001",
+  "accounts": [
+    {
+      "id": "acct_oauth_pro_001",
+      "provider": "codex",
+      "auth_mode": "oauth",
+      "email": "developer@example.com",
+      "plan_type": "pro",
+      "account_id": "acct_1234567890abc",
+      "organization_id": "org_9876543210fed",
+      "organizations": ["developer"],
+      "display_name": "Developer Pro",
+      "tags": ["work", "primary"],
+      "tokens": {
+        "access_token": "at_access_token_value_success_abc123",
+        "refresh_token": "rt_refresh_token_value_success_def456",
+        "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2F1dGgub3BlbmFpLmNvbS8iLCJzdWIiOiJhdXRoMHx1c2VyX2FiYzEyM2RlZjQ1NiIsImF1ZCI6IlUyQmNtcUxxRndzRnBNazhUNXI1R3FWcVZCRng1UmtQIiwiZXhwIjoxNzQ2Mjg5NjAwLCJpYXQiOjE3NDYyODkyMDAsImVtYWlsIjoiZGV2ZWxvcGVyQGV4YW1wbGUuY29tIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFjY291bnRfaWQiOiJhY2N0XzEyMzQ1Njc4OTBhYmMiLCJvcmdhbml6YXRpb25faWQiOiJvcmdfOTg3NjU0MzIxMGZlZCIsInBsYW5fdHlwZSI6InBybyIsIm9yZ2FuaXphdGlvbnMiOlsiZGV2ZWxvcGVyIl19fQ.mock_signature_base64url",
+        "token_type": "Bearer",
+        "expires_at": "2026-05-03T13:05:00Z"
+      },
+      "quota": null,
+      "created_at": "2026-04-01T08:00:00Z",
+      "last_used": "2026-05-03T12:00:00Z",
+      "last_refresh": "2026-05-03T12:05:00Z"
+    },
+    {
+      "id": "acct_oauth_free_002",
+      "provider": "codex",
+      "auth_mode": "oauth",
+      "email": "norefresh@example.com",
+      "plan_type": "free",
+      "account_id": "acct_norefresh001",
+      "organization_id": "org_norefresh",
+      "organizations": ["personal"],
+      "display_name": "Free Account",
+      "tags": ["personal"],
+      "tokens": {
+        "access_token": "at_access_token_no_refresh_ghi789",
+        "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2F1dGgub3BlbmFpLmNvbS8iLCJzdWIiOiJhdXRoMHx1c2VyX25vcmVmcmVzaCIsImF1ZCI6IlUyQmNtcUxxRndzRnBNazhUNXI1R3FWcVZCRng1UmtQIiwiZXhwIjoxNzQ2Mjg5NjAwLCJpYXQiOjE3NDYyODkyMDAsImVtYWlsIjoibm9yZWZyZXNoQGV4YW1wbGUuY29tIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFjY291bnRfaWQiOiJhY2N0X25vcmVmcmVzaDAwMSIsIm9yZ2FuaXphdGlvbl9pZCI6Im9yZ19ub3JlZnJlc2giLCJwbGFuX3R5cGUiOiJmcmVlIiwib3JnYW5pemF0aW9ucyI6WyJwZXJzb25hbCJdfX0.mock_sig_norefresh",
+        "token_type": "Bearer",
+        "expires_at": "2026-05-03T13:05:00Z"
+      },
+      "quota": null,
+      "created_at": "2026-04-15T10:00:00Z",
+      "last_used": "2026-05-02T18:00:00Z",
+      "last_refresh": "2026-05-02T18:01:00Z"
+    },
+    {
+      "id": "acct_apikey_openai_003",
+      "provider": "codex",
+      "auth_mode": "apikey",
+      "email": null,
+      "plan_type": null,
+      "account_id": null,
+      "organization_id": null,
+      "display_name": "OpenAI API Key",
+      "tags": ["api-key"],
+      "tokens": {},
+      "api_key": "sk-test_openai_api_key_mock_value_123",
+      "base_url": "https://api.openai.com/v1",
+      "provider_id": "cmp_openai_default",
+      "provider_name": "OpenAI",
+      "api_provider_mode": "openai",
+      "created_at": "2026-05-01T14:00:00Z",
+      "last_used": "2026-05-03T11:30:00Z",
+      "last_refresh": null
+    },
+    {
+      "id": "acct_apikey_custom_004",
+      "provider": "codex",
+      "auth_mode": "apikey",
+      "email": null,
+      "plan_type": null,
+      "account_id": null,
+      "organization_id": null,
+      "display_name": "Custom Provider Key",
+      "tags": ["api-key", "custom"],
+      "tokens": {},
+      "api_key": "sk-custom_provider_api_key_mock_456",
+      "base_url": "https://custom-llm.example.com/v1",
+      "provider_id": "cmp_custom_prov_001",
+      "provider_name": "Custom LLM",
+      "api_provider_mode": "custom",
+      "created_at": "2026-05-02T09:00:00Z",
+      "last_used": null,
+      "last_refresh": null
+    }
+  ]
+}

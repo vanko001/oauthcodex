@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "export_type": "codex_only",
+  "account_refs": ["acct_unresolved_ref_001"],
+  "codex_account_groups": [
+    {
+      "id": "cgrp_import_work",
+      "name": "Work Accounts",
+      "account_ids": ["acct_unresolved_ref_001"],
+      "sort_order": 1
+    }
+  ],
+  "codex_model_providers": [
+    {
+      "id": "cmp_import_duplicate",
+      "name": "Duplicate OpenAI",
+      "base_url": "https://api.openai.com/v1",
+      "api_keys": []
+    }
+  ],
+  "codex_wakeup_state": {
+    "runtime_path": "/usr/local/bin/node",
+    "tasks": [
+      {
+        "id": "wt_import_disabled_task",
+        "name": "Imported Disabled Task",
+        "schedule": {"kind": "daily", "time": "10:00"},
+        "enabled": false,
+        "account_id": "acct_unresolved_ref_001",
+        "preset_id": "code_review_extended"
+      }
+    ]
+  },
+  "codex_instance_stores": [],
+  "current_account_refresh_map": {
+    "codex": 10
+  }
+}

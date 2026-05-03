@@ -1,0 +1,29 @@
+{
+  "account_id": "acct_1234567890abc",
+  "plan_type": "pro",
+  "windows": [
+    {
+      "type": "primary",
+      "limit": 500,
+      "used": 500,
+      "percentage": 100.0,
+      "reset_at": "2026-05-04T00:00:00Z",
+      "label": "daily",
+      "presence": true
+    }
+  ],
+  "code_review_quota": {
+    "limit": 20,
+    "used": 20,
+    "percentage": 100.0,
+    "reset_at": "2026-05-04T00:00:00Z",
+    "label": "code_review_daily",
+    "presence": true
+  },
+  "raw_data": {
+    "usage": {
+      "primary_window": {"limit": 500, "used": 500, "reset": "2026-05-04T00:00:00Z"},
+      "code_review_window": {"limit": 20, "used": 20, "reset": "2026-05-04T00:00:00Z"}
+    }
+  }
+}

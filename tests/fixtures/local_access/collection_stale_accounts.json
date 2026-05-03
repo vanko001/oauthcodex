@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "accounts": ["acct_oauth_pro_001", "acct_missing_deleted"],
+  "port": 0,
+  "enabled": false,
+  "local_api_key": "sk-local-mock-key-stale-refs",
+  "restrict_free_accounts": false,
+  "routing_strategy": "auto"
+}

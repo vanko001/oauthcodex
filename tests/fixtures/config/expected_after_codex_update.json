@@ -1,0 +1,7 @@
+{
+  "codex_auto_refresh_minutes": 30,
+  "codex_launch_on_switch": true,
+  "codex_local_access_entry_visible": true,
+  "other_provider_field": "should_be_preserved",
+  "generic_settings_flag": true
+}

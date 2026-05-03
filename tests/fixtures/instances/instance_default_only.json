@@ -1,0 +1,19 @@
+{
+  "instances": [
+    {
+      "id": "inst_codex_default",
+      "name": "Default",
+      "is_default": true,
+      "working_dir": "/Users/vanko/codex-work",
+      "auth_mode": "oauth",
+      "bound_account_id": "acct_oauth_pro_001",
+      "follow_local_account": true,
+      "launch_mode": "auto",
+      "extra_args": [],
+      "extra_env": {},
+      "enabled": true,
+      "created_at": "2026-04-01T08:00:00Z",
+      "updated_at": "2026-05-03T12:00:00Z"
+    }
+  ]
+}

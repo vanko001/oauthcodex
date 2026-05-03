@@ -1,0 +1,10 @@
+{
+  "auth_mode": "oauth",
+  "tokens": {
+    "access_token": "at_access_token_value_success_abc123",
+    "refresh_token": "rt_refresh_token_value_success_def456",
+    "id_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2F1dGgub3BlbmFpLmNvbS8iLCJzdWIiOiJhdXRoMHx1c2VyX2FiYzEyM2RlZjQ1NiIsImF1ZCI6IlUyQmNtcUxxRndzRnBNazhUNXI1R3FWcVZCRng1UmtQIiwiZXhwIjoxNzQ2Mjg5NjAwLCJpYXQiOjE3NDYyODkyMDAsImVtYWlsIjoiZGV2ZWxvcGVyQGV4YW1wbGUuY29tIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFjY291bnRfaWQiOiJhY2N0XzEyMzQ1Njc4OTBhYmMiLCJvcmdhbml6YXRpb25faWQiOiJvcmdfOTg3NjU0MzIxMGZlZCIsInBsYW5fdHlwZSI6InBybyIsIm9yZ2FuaXphdGlvbnMiOlsiZGV2ZWxvcGVyIl19fQ.mock_signature_base64url",
+    "token_type": "Bearer",
+    "expires_at": "2026-05-03T13:05:00Z"
+  }
+}

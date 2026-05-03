@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "export_type": "codex_only",
+  "account_refs": ["acct_oauth_pro_001"],
+  "codex_account_groups": [
+    {
+      "id": "cgrp_export_work",
+      "name": "Work Accounts",
+      "account_ids": ["acct_oauth_pro_001"],
+      "sort_order": 1
+    }
+  ],
+  "codex_model_providers": [
+    {
+      "id": "cmp_export_openai",
+      "name": "OpenAI",
+      "base_url": "https://api.openai.com/v1",
+      "api_keys": [
+        {
+          "id": "cmk_export_key_001",
+          "key": "sk-test_openai_api_key_mock_value_123"
+        }
+      ]
+    }
+  ],
+  "codex_wakeup_state": {
+    "runtime_path": "/usr/local/bin/node",
+    "tasks": [
+      {
+        "id": "wt_export_daily_review",
+        "name": "Daily Code Review",
+        "schedule": {"kind": "daily", "time": "09:00"},
+        "enabled": false,
+        "account_id": "acct_oauth_pro_001",
+        "preset_id": "code_review_standard"
+      }
+    ]
+  },
+  "codex_instance_stores": [
+    {
+      "instance_id": "inst_export_default",
+      "name": "Default",
+      "is_default": true
+    }
+  ],
+  "current_account_refresh_map": {
+    "codex": 5
+  }
+}

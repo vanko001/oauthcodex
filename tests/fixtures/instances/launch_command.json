@@ -1,0 +1,11 @@
+{
+  "id": "inst_codex_default",
+  "launch_command": "CODEX_HOME=/Users/vanko/.codex /usr/local/bin/node /Applications/Codex.app/Contents/Resources/app/dist/codex-cli.js --cwd /Users/vanko/codex-work",
+  "launch_command_shell": "/bin/zsh",
+  "launch_command_args": [
+    "/usr/local/bin/node",
+    "/Applications/Codex.app/Contents/Resources/app/dist/codex-cli.js",
+    "--cwd",
+    "/Users/vanko/codex-work"
+  ]
+}

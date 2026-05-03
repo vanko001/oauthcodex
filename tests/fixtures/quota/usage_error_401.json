@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "auth_error",
+    "message": "Invalid or expired token",
+    "timestamp": "2026-05-03T12:00:00Z",
+    "status_code": 401
+  },
+  "retry_after_ms": null
+}

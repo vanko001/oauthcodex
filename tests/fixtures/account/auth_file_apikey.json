@@ -1,0 +1,5 @@
+{
+  "auth_mode": "apikey",
+  "api_key": "sk-test_openai_api_key_mock_value_123",
+  "base_url": "https://api.openai.com/v1"
+}

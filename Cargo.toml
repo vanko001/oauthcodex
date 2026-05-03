@@ -1,0 +1,75 @@
+[package]
+name = "oauthcodex"
+version = "0.1.0"
+edition = "2021"
+description = "Codex OAuth/account/features rewrite in pure Rust"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+url = "2"
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.8"
+toml_edit = "0.22"
+tempfile = "3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+jsonwebtoken = "9"
+axum = "0.8"
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+tower = "0.5"
+rusqlite = { version = "0.33", features = ["bundled"] }
+futures = "0.3"
+
+[dev-dependencies]
+tokio-test = "0.4"
+wiremock = "0.6"
+pretty_assertions = "1"
+
+[[bin]]
+name = "oauthcodex"
+path = "src/bin/oauthcodex.rs"
+
+[[test]]
+name = "oauth_flow"
+path = "tests/oauth_flow.rs"
+
+[[test]]
+name = "account_store"
+path = "tests/account_store.rs"
+
+[[test]]
+name = "quota"
+path = "tests/quota.rs"
+
+[[test]]
+name = "local_access_gateway"
+path = "tests/local_access_gateway.rs"
+
+[[test]]
+name = "codex_instances"
+path = "tests/codex_instances.rs"
+
+[[test]]
+name = "wakeup_scheduler"
+path = "tests/wakeup_scheduler.rs"
+
+[[test]]
+name = "config_contract"
+path = "tests/config_contract.rs"
+
+[[test]]
+name = "data_transfer"
+path = "tests/data_transfer.rs"
+
+[[test]]
+name = "ui_contract"
+path = "tests/ui_contract.rs"

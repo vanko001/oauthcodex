@@ -1,0 +1,25 @@
+{
+  "accounts": [
+    {
+      "id": "acct_import_valid_001",
+      "provider": "codex",
+      "auth_mode": "oauth",
+      "email": "valid@example.com",
+      "display_name": "Valid Account",
+      "tokens": {
+        "access_token": "at_valid_token"
+      }
+    },
+    {
+      "id": "acct_import_missing_tokens",
+      "provider": "codex",
+      "auth_mode": "oauth",
+      "email": "broken@example.com",
+      "display_name": "Broken Account"
+    },
+    {
+      "auth_mode": "apikey",
+      "display_name": "No ID"
+    }
+  ]
+}

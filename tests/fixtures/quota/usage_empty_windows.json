@@ -1,0 +1,9 @@
+{
+  "account_id": "acct_1234567890abc",
+  "plan_type": "pro",
+  "windows": [],
+  "code_review_quota": null,
+  "raw_data": {
+    "usage": {}
+  }
+}

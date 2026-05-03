@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "export_type": "codex_only",
+  "account_refs": ["acct_oauth_pro_001", "acct_apikey_openai_003"],
+  "codex_account_groups": [],
+  "codex_model_providers": [],
+  "codex_wakeup_state": null,
+  "codex_instance_stores": null,
+  "current_account_refresh_map": {}
+}

@@ -1,0 +1,8 @@
+{
+  "login_id": "login_stale_expired",
+  "state": "st_stale_state_value",
+  "code_verifier": "cv_stale_verifier_value",
+  "code_challenge": "cc_stale_challenge_value",
+  "created_at": "2026-05-03T10:00:00Z",
+  "expires_at": "2026-05-03T10:05:00Z"
+}

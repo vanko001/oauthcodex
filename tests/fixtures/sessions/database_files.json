@@ -1,0 +1,8 @@
+{
+  "rollout_files": [
+    "codex_rollout_v1.db",
+    "codex_rollout_v2.db"
+  ],
+  "index_file": "codex_session_index.json",
+  "db_corrupt": "codex_sessions_corrupt.db"
+}

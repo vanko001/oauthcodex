@@ -1,0 +1,4 @@
+{
+  "usage_endpoint": "https://chatgpt.com/backend-api/wham/usage",
+  "profile_endpoint": "https://chatgpt.com/backend-api/wham/accounts/check"
+}

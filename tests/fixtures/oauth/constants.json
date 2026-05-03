@@ -1,0 +1,17 @@
+{
+  "client_id": "U2BcmqLqFwsFpMk8T5r5GqVqVBFx5RkP",
+  "auth_endpoint": "https://auth.openai.com/oauth/authorize",
+  "token_endpoint": "https://auth.openai.com/oauth/token",
+  "callback_port": 1455,
+  "callback_path": "/auth/callback",
+  "cancel_path": "/cancel",
+  "timeout_seconds": 300,
+  "scopes": "openid profile email offline_access api.connectors.read api.connectors.invoke",
+  "originator": "codex_vscode",
+  "redirect_uri": "http://localhost:1455/auth/callback",
+  "pending_state_file": "codex_oauth_pending.json",
+  "extra_auth_params": {
+    "id_token_add_organizations": "true",
+    "codex_cli_simplified_flow": "true"
+  }
+}

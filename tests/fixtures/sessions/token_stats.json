@@ -1,0 +1,10 @@
+{
+  "id": "sess_abc123_codex_default",
+  "token_stats": {
+    "total_tokens": 250,
+    "prompt_tokens": 120,
+    "completion_tokens": 130,
+    "average_per_message": 20,
+    "peak_message_tokens": 80
+  }
+}

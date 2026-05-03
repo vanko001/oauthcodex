@@ -1,0 +1,36 @@
+{
+  "instances": [
+    {
+      "id": "inst_codex_default",
+      "name": "Default",
+      "is_default": true,
+      "working_dir": "/Users/vanko/codex-work",
+      "auth_mode": "oauth",
+      "bound_account_id": "acct_oauth_pro_001",
+      "follow_local_account": true,
+      "launch_mode": "auto",
+      "extra_args": [],
+      "extra_env": {},
+      "enabled": true,
+      "created_at": "2026-04-01T08:00:00Z",
+      "updated_at": "2026-05-03T12:00:00Z"
+    },
+    {
+      "id": "inst_codex_named_001",
+      "name": "Python Project",
+      "is_default": false,
+      "working_dir": "/Users/vanko/projects/python-app",
+      "auth_mode": "apikey",
+      "bound_account_id": null,
+      "follow_local_account": false,
+      "launch_mode": "manual",
+      "extra_args": ["--model", "gpt-4o"],
+      "extra_env": {
+        "PROJECT": "python-app"
+      },
+      "enabled": true,
+      "created_at": "2026-05-01T10:00:00Z",
+      "updated_at": "2026-05-02T15:00:00Z"
+    }
+  ]
+}

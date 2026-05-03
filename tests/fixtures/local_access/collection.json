@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "accounts": ["acct_oauth_pro_001"],
+  "port": 0,
+  "enabled": false,
+  "local_api_key": "sk-local-mock-key-abc123def456",
+  "restrict_free_accounts": true,
+  "routing_strategy": "auto",
+  "created_at": "2026-05-01T10:00:00Z",
+  "updated_at": "2026-05-03T12:00:00Z"
+}
