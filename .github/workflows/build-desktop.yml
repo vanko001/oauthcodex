@@ -82,7 +82,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: src-tauri
+          projectPath: .
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: OAuth Codex ${{ env.RELEASE_TAG }}
           releaseBody: Native Windows and macOS builds for OAuth Codex.
