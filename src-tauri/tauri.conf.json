@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OAuth Codex",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.oauthcodex.app",
   "build": {
     "frontendDist": "../ui/dist",
@@ -26,7 +26,7 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "targets": "all"
   }
 }
