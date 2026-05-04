@@ -7,6 +7,15 @@ on:
         description: GitHub release tag to create or update
         required: true
         default: v0.1.1
+      platform:
+        description: Platform set to build
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - windows
+          - macos
   push:
     tags:
       - "v*"
@@ -26,23 +35,27 @@ jobs:
       matrix:
         include:
           - name: Windows x64
+            family: windows
             platform: windows-latest
             args: ""
             rust_targets: ""
           - name: macOS Apple Silicon
+            family: macos
             platform: macos-latest
             args: "--target aarch64-apple-darwin"
             rust_targets: "aarch64-apple-darwin"
           - name: macOS Intel
+            family: macos
             platform: macos-latest
             args: "--target x86_64-apple-darwin"
             rust_targets: "x86_64-apple-darwin"
-
     steps:
       - name: Checkout
+        if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.family
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.family
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
@@ -50,19 +63,21 @@ jobs:
           cache-dependency-path: ui/package-lock.json
 
       - name: Setup Rust
-        if: matrix.rust_targets == ''
+        if: (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.family) && matrix.rust_targets == ''
         uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Rust with targets
-        if: matrix.rust_targets != ''
+        if: (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.family) && matrix.rust_targets != ''
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_targets }}
 
       - name: Install frontend dependencies
+        if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.family
         run: npm --prefix ui ci
 
       - name: Build and upload Tauri bundles
+        if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == matrix.family
         uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
