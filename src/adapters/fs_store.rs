@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
+#[derive(Clone)]
 pub struct CodexPaths {
     pub home: PathBuf,
     pub codex_dir: PathBuf,
@@ -31,7 +32,7 @@ impl CodexPaths {
             config_file: codex_dir.join("config.toml"),
             codex_dir,
             account_dir,
-            account_index_file: cockpit_dir.join("codex_account_index.json"),
+            account_index_file: cockpit_dir.join("codex_accounts.json"),
             codex_account_groups_file: cockpit_dir.join("codex_account_groups.json"),
             codex_model_providers_file: cockpit_dir.join("codex_model_providers.json"),
             codex_oauth_pending_file: cockpit_dir.join("codex_oauth_pending.json"),
@@ -53,7 +54,7 @@ impl CodexPaths {
             config_file: codex_dir.join("config.toml"),
             codex_dir,
             account_dir,
-            account_index_file: cockpit_dir.join("codex_account_index.json"),
+            account_index_file: cockpit_dir.join("codex_accounts.json"),
             codex_account_groups_file: cockpit_dir.join("codex_account_groups.json"),
             codex_model_providers_file: cockpit_dir.join("codex_model_providers.json"),
             codex_oauth_pending_file: cockpit_dir.join("codex_oauth_pending.json"),

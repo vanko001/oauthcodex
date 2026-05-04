@@ -1,22 +1,153 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+const SOURCE_INDEX_VERSION: &str = "1.0";
+
+fn default_provider() -> String {
+    "codex".to_string()
+}
+
+fn default_index_version() -> String {
+    SOURCE_INDEX_VERSION.to_string()
+}
+
+fn deserialize_index_version<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::String(s) if !s.trim().is_empty() => s,
+        serde_json::Value::Number(_) => SOURCE_INDEX_VERSION.to_string(),
+        _ => SOURCE_INDEX_VERSION.to_string(),
+    })
+}
+
+fn deserialize_string_or_empty<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::String(s)) => s,
+        Some(serde_json::Value::Number(n)) => n.to_string(),
+        Some(serde_json::Value::Bool(b)) => b.to_string(),
+        _ => String::new(),
+    })
+}
+
+fn deserialize_vec_or_null<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Vec<String>>::deserialize(deserializer)?;
+    Ok(value.unwrap_or_default())
+}
+
+fn epoch_seconds_from_value(value: &serde_json::Value) -> Option<i64> {
+    match value {
+        serde_json::Value::Number(n) => {
+            n.as_i64()
+                .map(|v| if v > 10_000_000_000 { v / 1000 } else { v })
+        }
+        serde_json::Value::String(s) => {
+            if let Ok(v) = s.parse::<i64>() {
+                Some(if v > 10_000_000_000 { v / 1000 } else { v })
+            } else {
+                chrono::DateTime::parse_from_rfc3339(s)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            }
+        }
+        _ => None,
+    }
+}
+
+fn deserialize_epoch_seconds<'de, D>(deserializer: D) -> Result<i64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(epoch_seconds_from_value(&value).unwrap_or(0))
+}
+
+mod timestamp_option {
+    use super::*;
+
+    pub fn serialize<S>(value: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match value {
+            Some(raw) => {
+                let json = serde_json::Value::String(raw.clone());
+                serializer.serialize_i64(epoch_seconds_from_value(&json).unwrap_or(0))
+            }
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+        Ok(value.map(|raw| match epoch_seconds_from_value(&raw) {
+            Some(epoch) => chrono::DateTime::from_timestamp(epoch, 0)
+                .unwrap_or_default()
+                .to_rfc3339(),
+            None => raw
+                .as_str()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| raw.to_string()),
+        }))
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub enum CodexAuthMode {
     #[serde(rename = "oauth")]
+    #[default]
     OAuth,
     #[serde(rename = "apikey")]
     ApiKey,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum CodexApiProviderMode {
-    #[serde(rename = "openai")]
+    #[default]
     OpenAI,
-    #[serde(rename = "custom")]
     Custom,
-    #[serde(rename = "azure")]
     Azure,
+}
+
+impl Serialize for CodexApiProviderMode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::OpenAI => serializer.serialize_str("openai_builtin"),
+            Self::Custom | Self::Azure => serializer.serialize_str("custom"),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for CodexApiProviderMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.trim().to_lowercase().as_str() {
+            "openai" | "openai_builtin" => Ok(Self::OpenAI),
+            "custom" => Ok(Self::Custom),
+            "azure" => Ok(Self::Azure),
+            other => Err(serde::de::Error::custom(format!(
+                "unknown Codex API provider mode: {other}"
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -123,12 +254,24 @@ pub struct CodexQuota {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexAuthFile {
+    #[serde(default)]
     pub auth_mode: CodexAuthMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tokens: Option<CodexTokens>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "OPENAI_API_KEY",
+        alias = "api_key",
+        alias = "openai_api_key",
+        alias = "apiKey",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub api_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        alias = "api_base_url",
+        alias = "apiBaseUrl",
+        alias = "baseUrl",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub base_url: Option<String>,
 }
 
@@ -166,7 +309,9 @@ pub struct JwtPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexAccount {
     pub id: String,
+    #[serde(default = "default_provider")]
     pub provider: String,
+    #[serde(default)]
     pub auth_mode: CodexAuthMode,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
@@ -178,26 +323,57 @@ pub struct CodexAccount {
     pub organization_id: Option<String>,
     #[serde(default)]
     pub organizations: Vec<String>,
-    pub display_name: String,
     #[serde(default)]
+    pub display_name: String,
+    #[serde(default, deserialize_with = "deserialize_vec_or_null")]
     pub tags: Vec<String>,
     #[serde(default)]
     pub tokens: CodexTokens,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "openai_api_key",
+        alias = "api_key",
+        alias = "apiKey",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub api_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "api_base_url",
+        alias = "base_url",
+        alias = "baseUrl",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub base_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "api_provider_id",
+        alias = "provider_id",
+        alias = "providerId",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub provider_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "api_provider_name",
+        alias = "provider_name",
+        alias = "providerName",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub provider_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_provider_mode: Option<CodexApiProviderMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quota: Option<Box<CodexQuota>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "timestamp_option::serialize",
+        deserialize_with = "timestamp_option::deserialize",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub created_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        serialize_with = "timestamp_option::serialize",
+        deserialize_with = "timestamp_option::deserialize",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub last_used: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_refresh: Option<String>,
@@ -223,27 +399,39 @@ impl CodexAccount {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexAccountIndex {
-    pub version: u32,
+    #[serde(
+        default = "default_index_version",
+        deserialize_with = "deserialize_index_version"
+    )]
+    pub version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_account_id: Option<String>,
-    pub accounts: Vec<CodexAccount>,
+    #[serde(default)]
+    pub accounts: Vec<CodexAccountSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexAccountSummary {
     pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_string_or_empty")]
+    pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_type: Option<String>,
-    pub display_name: String,
-    #[serde(default)]
-    pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subscription_active_until: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_epoch_seconds")]
+    pub created_at: i64,
+    #[serde(default, deserialize_with = "deserialize_epoch_seconds")]
+    pub last_used: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexAccountSummaryList {
-    pub version: u32,
+    #[serde(
+        default = "default_index_version",
+        deserialize_with = "deserialize_index_version"
+    )]
+    pub version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_account_id: Option<String>,
     pub accounts: Vec<CodexAccountSummary>,

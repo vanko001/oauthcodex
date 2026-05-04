@@ -65,14 +65,13 @@ Key runtime paths (all under user home):
 - **Config setters must preserve unrelated fields** — never rewrite entire Settings payload; only touch Codex fields.
 - **Preference/localStorage keys** defined in `src/domain/preferences.rs`; all 8 keys from `SOURCE_MAP.md` §121 are implemented.
 
-## Known gaps (as of Phase 14 audit)
+## Known gaps (updated after app/Rust bridge mapping)
 
 - `adapters/local_gateway.rs` — HTTP proxy server not built (SSE, chat/completions ↔ responses conversion, routing strategies). Placeholder test exists with 0 tests.
 - `adapters/process.rs` — process launch/kill adapter not created (can't spawn real apps in tests).
 - Auto-refresh background scheduler — tokio interval timer not implemented. Clamping/setter logic exists in `config.rs`.
-- Token refresh per-account Mutex lock — not yet implemented in AccountStore.
 - Tray, native menu, web-report hooks — Tauri-specific and deferred.
-- UI (`oauthcodex/ui/**`) — intentionally deferred (Phase 13 not executed).
+- UI (`oauthcodex/ui/**`) exists and maps through `src/adapters/app_bridge.rs`; app/Rust tests cover bridge contracts. Browser/web verification is separate and not required for app-only backend work.
 
 ## Testing conventions
 
@@ -87,4 +86,4 @@ Key runtime paths (all under user home):
 - `PLAN.md` — 14-phase implementation plan with gate checklists and parity matrix
 - `WORKFLOW.md` — daily workflow, multi-pass recheck procedure
 - `SOURCE_MAP.md` — canonical source file inventory and shared dependency list
-- `UI_PLAN.md` — deferred Codex-only UI blueprint
+- `UI_PLAN.md` — Codex-only UI blueprint and contract reference

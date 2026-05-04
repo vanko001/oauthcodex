@@ -6,6 +6,18 @@
 
 **Tech Stack:** Rust, Tokio, Reqwest, Serde, serde_json, toml_edit, url, base64, sha2, rand, tiny_http hoặc axum/hyper cho local callback/gateway, tempfile, mockito/wiremock, rusqlite nếu cần session DB.
 
+## Phase 15: App/Rust Bridge Contract Update
+
+Implemented after comparing with `jlcodes99/cockpit-tools` source:
+
+- Account index path now matches source: `~/.antigravity_cockpit/codex_accounts.json`.
+- Account index now stores source-style summaries only (`version: "1.0"`, id/email/plan/timestamps), while full account JSON stays in `codex_accounts/<id>.json`.
+- Legacy `codex_account_index.json` full-account indexes are read and migrated without deleting user data.
+- API-key accounts now use source-compatible ids/emails (`codex_apikey_<md5>`, `api-key-<hash>`), `OPENAI_API_KEY` auth file output, `openai_api_key` export, and can be switched through the managed flow.
+- OAuth completion has an exchange-and-save path for app/CLI usage.
+- `src/adapters/app_bridge.rs` exposes app-facing Rust methods matching the UI/Tauri command surface for accounts, OAuth, config, local access, groups, and model providers.
+- UI browser tests were not run in this pass by request; app/Rust verification is covered by `tests/app_bridge_contract.rs`.
+
 ---
 
 ## Source Boundary
@@ -286,7 +298,7 @@ Must remove:
 
 - Source parity checked: yes
 - Tests run: 17 unit tests all pass; `cargo fmt --check` pass; `cargo clippy --all-targets -- -D warnings` pass
-- Known gaps: source repo not on disk; model fields derived from fixture contracts and PLAN.md. Will re-audit against actual source when available.
+- Known gaps at that time: source repo not on disk; superseded by Phase 15 source-compatible model re-audit.
 - Next phase allowed: yes
 
 ## Phase 3: Filesystem Store And Atomic Writes
@@ -316,7 +328,7 @@ Must remove:
 
 - Source parity checked: yes
 - Tests run: 47 total (34 lib + 13 integration); `cargo fmt --check` pass; `cargo clippy --all-targets -- -D warnings` pass
-- Known gaps: source repo not available for direct comparison; derived from fixture contracts and PLAN.md
+- Known gaps at that time: source repo not available for direct comparison; superseded by Phase 15 source-compatible filesystem re-audit.
 - Next phase allowed: yes
 
 ## Phase 4: OAuth PKCE Login
@@ -654,7 +666,7 @@ Must remove:
 | --- | --- | --- | --- | --- |
 | OAuth start/callback/manual/complete/cancel/restore | `src-tauri/src/modules/codex_oauth.rs` | `domain/oauth.rs` | `tests/oauth_flow.rs` (18 tests) | **implemented** |
 | Token refresh/JWT expiry | `src-tauri/src/modules/codex_oauth.rs` | `domain/oauth.rs` | `tests/oauth_flow.rs` (decode/expiry tests) | **implemented** |
-| Account model/store/import/export | `src-tauri/src/modules/codex_account.rs` | `domain/account.rs` | `tests/account_store.rs` (13 tests) | **implemented** |
+| Account model/store/import/export | `src-tauri/src/modules/codex_account.rs` | `domain/account.rs` | `tests/account_store.rs` (18 tests) | **implemented** |
 | API key/provider credentials | `src-tauri/src/modules/codex_account.rs`, `src/utils/codexProviderPresets.ts` | `domain/api_key.rs`, `model_provider.rs` | lib tests (10 api_key + 9 model_provider) | **implemented** |
 | Account groups | `src/services/codexAccountGroupService.ts`, `src-tauri/src/commands/codex.rs` | `domain/group.rs` | lib tests (8 tests) | **implemented** |
 | Model provider store | `src/services/codexModelProviderService.ts`, `src-tauri/src/commands/codex.rs` | `domain/model_provider.rs` | lib tests (9 tests) | **implemented** |
@@ -669,8 +681,8 @@ Must remove:
 | Data transfer | `src/services/dataTransferService.ts`, `src-tauri/src/commands/data_transfer.rs` | `domain/data_transfer.rs` | `tests/data_transfer.rs` (5 tests) | **implemented** |
 | Preferences/presentation | `src/utils/codexPreferences.ts`, `src/presentation/platformAccountPresentation.ts` | `domain/preferences.rs` | `tests/ui_contract.rs` (16 tests) | **partially implemented** |
 | Startup/tray/native menu/report hooks | `src-tauri/src/lib.rs`, `src-tauri/src/modules/tray.rs`, `src-tauri/src/modules/macos_native_menu.rs`, `src-tauri/src/modules/web_report.rs` | facade/adapters | N/A (adapter-bound, not domain) | **intentionally deferred** |
-| Frontend command/event/global app contract | `src/App.tsx`, `src/services/codex*.ts` | CLI bridge (`src/bin/oauthcodex.rs`) | CLI functional (8 commands) | **partially implemented** |
-| Codex-only UI | `src/pages/CodexAccountsPage.tsx`, `src/components/codex/**`, `src/styles/pages/codex.css`, `oauthcodex/UI_PLAN.md` | `oauthcodex/ui/**` | N/A (not created) | **intentionally deferred** |
+| Frontend command/event/global app contract | `src/App.tsx`, `src/services/codex*.ts` | `src/adapters/app_bridge.rs`, CLI bridge (`src/bin/oauthcodex.rs`) | `tests/app_bridge_contract.rs` (3 tests) + CLI compile | **implemented for app/Rust bridge** |
+| Codex-only UI | `src/pages/CodexAccountsPage.tsx`, `src/components/codex/**`, `src/styles/pages/codex.css`, `oauthcodex/UI_PLAN.md` | `oauthcodex/ui/**` | Browser/web test not run in app-only pass | **implemented in workspace; app bridge covered** |
 
 ## Low-Level Edge Case Matrix
 
@@ -719,22 +731,23 @@ Must remove:
 - **Source parity checked:** yes — all constants, endpoints, OAuth scopes, client IDs, file names, runtime paths, localStorage keys, and event names verified against SOURCE_MAP.md, RULES.md, and UI_PLAN.md specifications.
 - **Tests run:**
   - `cargo fmt --manifest-path oauthcodex/Cargo.toml --check` — **pass**
-  - `cargo test --manifest-path oauthcodex/Cargo.toml` — **245 tests pass** (146 lib + 99 integration)
+  - `cargo test --manifest-path oauthcodex/Cargo.toml` — **264 tests pass** (153 lib + 111 integration)
   - `cargo clippy --manifest-path oauthcodex/Cargo.toml --all-targets -- -D warnings` — **pass**
   - Integration test targets:
-    - `oauth_flow` — 18 pass
-    - `account_store` — 13 pass
+    - `oauth_flow` — 19 pass
+    - `account_store` — 18 pass
+    - `app_bridge_contract` — 3 pass
     - `local_access_gateway` — 0 (placeholder, local gateway adapter deferred)
     - `wakeup_scheduler` — 12 pass
     - `codex_instances` — 11 pass
-    - `config_contract` — 14 pass
-    - `data_transfer` — 5 pass
+    - `config_contract` — 15 pass
+    - `data_transfer` — 6 pass
     - `ui_contract` — 16 pass
 
 - **Feature parity summary:**
-  - **implemented** (12/19): OAuth PKCE, token/JWT, account CRUD/import/export, API key validation, provider/group stores, switch/auth projection, quota/auto-switch/alerts, instances, sessions/visibility repair, wakeup, config/settings, data transfer
+  - **implemented**: OAuth PKCE, token/JWT, source-compatible account CRUD/import/export, API key validation/upsert/switch, app-facing Rust bridge, provider/group stores, switch/auth projection, quota/auto-switch/alerts, instances, sessions/visibility repair, wakeup, config/settings, data transfer
   - **partially implemented** (3/19): auto refresh (clamping/setters done, async scheduler deferred), local API service (domain logic done, HTTP gateway adapter deferred), preferences (key constants done, presentation helpers deferred)
-  - **intentionally deferred** (4/19): startup/tray/native menu/report hooks (adapter-bound, needs Tauri bridge), Codex-only UI (Phase 13 not executed), `codex:file-import-progress` event, wakeup/local-access progress events
+  - **intentionally deferred**: startup/tray/native menu/report hooks (adapter-bound), Tauri shell registration around `app_bridge`, `codex:file-import-progress` event, wakeup/local-access progress events
 
 - **Event name coverage:**
   - `codex-oauth-login-completed` — implemented (`domain/oauth.rs:163`)
@@ -755,6 +768,7 @@ Must remove:
 
 - **Runtime file paths** — All paths from SOURCE_MAP.md ¶110-117 present in `adapters/fs_store.rs`:
   - `~/.codex/auth.json`, `~/.codex/config.toml`
+  - `~/.antigravity_cockpit/codex_accounts.json`
   - `~/.antigravity_cockpit/codex_account_groups.json`
   - `~/.antigravity_cockpit/codex_model_providers.json`
   - `~/.antigravity_cockpit/codex_oauth_pending.json`
@@ -767,11 +781,10 @@ Must remove:
   - `adapters/local_gateway.rs` — HTTP proxy gateway with chat/completions ↔ responses conversion, SSE streaming, routing strategies; placeholder test file exists
   - `adapters/process.rs` — process launch/kill adapter; CLI cannot spawn real apps in test, deferred
   - `adapters/config_store.rs` — config persistence already lives in `domain/config.rs`
-  - `ui/**` — Codex-only frontend not created; entire Phase 13 intentionally skipped per user confirmation
+  - Tauri command registration shell — this crate exposes `src/adapters/app_bridge.rs`; a Tauri app wrapper still needs to bind those methods with `#[tauri::command]`.
 
 - **Known gaps / blockers:**
-  - Source repo `cockpit-tools` not available on this machine; all contracts derived from oauthcodex specification files (PLAN.md, RULES.md, SOURCE_MAP.md). Re-audit against actual source when available.
-  - Token refresh per-account lock (`ensure_managed_account_fresh`) not implemented — needs `Mutex<HashMap<String, ...>>` in AccountStore
+  - Browser/web UI verification is separate from this app-only backend pass.
   - Local access HTTP gateway server not implemented — requires complex integration with axum/hyper, SSE, request/response transforms
   - Auto-refresh background scheduler not implemented — requires tokio interval timer
   - Tray/native menu/web-report hooks not implemented — Tauri-specific adapter
@@ -787,5 +800,5 @@ Must remove:
   7. Start/stop Codex instance with real Codex CLI
   8. Run wakeup task with real Codex CLI execution
 
-- **Conclusion:** Phase 14 final parity audit complete. All 245 tests pass, fmt and clippy clean. The rust domain core (Phases 0-12) is implemented with full test coverage for all major subsystems. UI (Phase 13) and adapter-level integrations (startup hooks, HTTP gateway, process management, background refresh scheduler) are intentionally deferred as they require either a frontend runtime or real system resources that cannot be tested headlessly.
+- **Conclusion:** Phase 15 app/Rust bridge update complete. All 264 Rust tests pass, fmt and clippy are clean. The Rust domain core and app-facing bridge are implemented for source-compatible account storage, API-key flows, OAuth exchange completion, local access state, and UI command mapping. Browser/web UI verification remains a separate gate; startup hooks, HTTP gateway, process management, and background refresh scheduler remain adapter-level work.
 - **Next phase allowed:** N/A — final phase. Ready for integration into cockpit-tools app.

@@ -1,4 +1,6 @@
 use crate::adapters::fs_store::{read_json_file_opt, write_json_atomic, CodexPaths};
+use crate::adapters::http_client::HttpClient;
+use crate::domain::account::AccountStore;
 use crate::domain::codex_models::*;
 use crate::error::CodexError;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -335,6 +337,59 @@ impl OAuthService {
             self.clear_pending()?;
         }
         result
+    }
+
+    pub async fn complete_oauth_login_with_exchange(
+        &self,
+        login_id: &str,
+        callback_pairs: &[(String, String)],
+    ) -> Result<CodexAccount, CodexError> {
+        let pending = self
+            .load_pending()?
+            .ok_or_else(|| CodexError::OAuth("No active OAuth login".into()))?;
+
+        if pending.is_expired() {
+            return Err(CodexError::AuthState(format!(
+                "OAuth login expired: {}",
+                pending.login_id
+            )));
+        }
+
+        if pending.login_id != login_id {
+            return Err(CodexError::AuthState(format!(
+                "Stale login id: expected {} got {}",
+                pending.login_id, login_id
+            )));
+        }
+
+        let (code, verifier) = self.complete_oauth_login(callback_pairs, &pending)?;
+        let token_response = HttpClient::new()?
+            .exchange_code_for_tokens(
+                &self.config.token_endpoint,
+                &code,
+                &verifier,
+                &pending.redirect_uri,
+                &self.config.client_id,
+            )
+            .await?;
+
+        let expires_at = token_response
+            .expires_in
+            .map(|seconds| (Utc::now() + chrono::Duration::seconds(seconds as i64)).to_rfc3339());
+        let tokens = CodexTokens {
+            access_token: token_response.access_token,
+            refresh_token: token_response.refresh_token,
+            id_token: token_response.id_token,
+            token_type: token_response.token_type.or_else(|| Some("Bearer".into())),
+            expires_at,
+            scope: token_response.scope,
+        };
+
+        let store = AccountStore::new(self.paths.clone());
+        let account = store.account_from_oauth_tokens(&tokens)?;
+        store.upsert_account(account.clone())?;
+        self.clear_pending()?;
+        Ok(account)
     }
 
     pub fn cancel_login(&self, login_id: &str) -> Result<(), CodexError> {

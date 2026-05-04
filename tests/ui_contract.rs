@@ -108,10 +108,10 @@ fn test_runtime_file_path_cockpit_child() {
     let home = dirs_fake_home();
     let path = home
         .join(".antigravity_cockpit")
-        .join("codex_account_index.json");
+        .join("codex_accounts.json");
     assert!(path
         .to_string_lossy()
-        .contains(".antigravity_cockpit/codex_account_index.json"));
+        .contains(".antigravity_cockpit/codex_accounts.json"));
 }
 
 #[test]

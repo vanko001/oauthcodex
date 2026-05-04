@@ -31,11 +31,12 @@ fn cmd_oauth_complete(args: &[String]) -> Result<String, CodexError> {
     let paths = runtime_paths()?;
     let svc = OAuthService::new(paths);
     let (code, state) = svc.parse_manual_callback(callback_url)?;
-    svc.complete_oauth_login_for_login(
+    let runtime = tokio::runtime::Runtime::new().map_err(CodexError::Io)?;
+    let account = runtime.block_on(svc.complete_oauth_login_with_exchange(
         login_id,
         &[("code".to_string(), code), ("state".to_string(), state)],
-    )?;
-    Ok(json!({"status": "completed", "login_id": login_id}).to_string())
+    ))?;
+    Ok(json!({"status": "completed", "login_id": login_id, "account_id": account.id}).to_string())
 }
 
 fn cmd_oauth_cancel(args: &[String]) -> Result<String, CodexError> {
@@ -63,6 +64,36 @@ fn cmd_account_switch(args: &[String]) -> Result<String, CodexError> {
     let store = AccountStore::new(paths);
     store.switch_account_managed(account_id)?;
     Ok(json!({"status": "switched", "account_id": account_id}).to_string())
+}
+
+fn cmd_account_add_api_key(args: &[String]) -> Result<String, CodexError> {
+    let api_key = args.first().ok_or_else(|| {
+        CodexError::InvalidState("Usage: account add-api-key <api_key> [base_url]".into())
+    })?;
+    let base_url = args.get(1).map(String::as_str);
+    let paths = runtime_paths()?;
+    let store = AccountStore::new(paths);
+    let account = store.upsert_api_key_account(api_key, base_url, None, None, None)?;
+    Ok(serde_json::to_string_pretty(&account).unwrap_or_default())
+}
+
+fn cmd_account_import_json(args: &[String]) -> Result<String, CodexError> {
+    let path = args
+        .first()
+        .ok_or_else(|| CodexError::InvalidState("Usage: account import-json <path>".into()))?;
+    let content = std::fs::read_to_string(path).map_err(CodexError::Io)?;
+    let paths = runtime_paths()?;
+    let store = AccountStore::new(paths);
+    let result = store.import_json_accounts(&content)?;
+    Ok(json!({"imported": result.imported, "failed": result.failed}).to_string())
+}
+
+fn cmd_account_export(args: &[String]) -> Result<String, CodexError> {
+    let paths = runtime_paths()?;
+    let store = AccountStore::new(paths);
+    let account_ids = args.to_vec();
+    let accounts = store.export_accounts(&account_ids)?;
+    Ok(serde_json::to_string_pretty(&accounts).unwrap_or_default())
 }
 
 fn cmd_quota_refresh() -> Result<String, CodexError> {
@@ -100,6 +131,9 @@ fn handle_command(cmd: &str, args: &[String]) -> Result<String, CodexError> {
         "account" => match args.first().map(|s| s.as_str()) {
             Some("list") => cmd_account_list(),
             Some("switch") => cmd_account_switch(&args[1..]),
+            Some("add-api-key") => cmd_account_add_api_key(&args[1..]),
+            Some("import-json") => cmd_account_import_json(&args[1..]),
+            Some("export") => cmd_account_export(&args[1..]),
             _ => Err(CodexError::InvalidState(
                 "Unknown account subcommand".into(),
             )),
@@ -136,6 +170,9 @@ Commands:
   oauth cancel <id>        Cancel OAuth login
   account list             List all accounts
   account switch <id>      Switch to account
+  account add-api-key <key> [base_url]
+  account import-json <path>
+  account export [account_id...]
   quota refresh            Refresh current account quota
   local-access state       Show local access state
   wakeup status            Show wakeup scheduler status
