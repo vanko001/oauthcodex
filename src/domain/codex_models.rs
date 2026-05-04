@@ -281,7 +281,7 @@ pub struct CodexPendingOAuthState {
     pub expires_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RoutingStrategy {
     Auto,
@@ -364,7 +364,7 @@ pub struct LocalAccessStatsFile {
     pub requests: Vec<LocalAccessStatsEvent>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum InstanceLaunchMode {
     Auto,
@@ -475,7 +475,7 @@ pub struct VisibilityRepairReport {
     pub repair_result: VisibilityRepairResult,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WakeupScheduleKind {
     Daily,
@@ -550,6 +550,18 @@ pub struct WakeupProgressEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WakeupTaskUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schedule: Option<WakeupSchedule>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

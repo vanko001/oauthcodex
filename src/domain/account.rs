@@ -313,6 +313,270 @@ impl AccountStore {
     pub fn load_auth_file_opt(&self, path: &Path) -> Result<Option<CodexAuthFile>, CodexError> {
         read_json_file_opt(path)
     }
+
+    pub fn import_local_auth_json(&self) -> Result<Option<CodexAccount>, CodexError> {
+        let auth_file_path = &self.paths.auth_file;
+        match self.load_auth_file_opt(auth_file_path)? {
+            Some(auth_file) => {
+                let account = match auth_file.auth_mode {
+                    CodexAuthMode::OAuth => {
+                        let tokens = auth_file.tokens.unwrap_or_default();
+                        self.account_from_oauth_tokens(&tokens)?
+                    }
+                    CodexAuthMode::ApiKey => {
+                        let account = CodexAccount {
+                            id: format!(
+                                "acct_local_import_{}",
+                                &uuid::Uuid::new_v4().to_string().replace('-', "_")[..16]
+                            ),
+                            provider: "codex".into(),
+                            auth_mode: CodexAuthMode::ApiKey,
+                            email: None,
+                            plan_type: None,
+                            account_id: None,
+                            organization_id: None,
+                            organizations: vec![],
+                            display_name: "Imported API Key".into(),
+                            tags: vec!["imported".into(), "api-key".into()],
+                            tokens: CodexTokens::empty(),
+                            api_key: auth_file.api_key.clone(),
+                            base_url: auth_file
+                                .base_url
+                                .or(Some("https://api.openai.com/v1".into())),
+                            provider_id: Some("cmp_local_import".into()),
+                            provider_name: Some("Imported Provider".into()),
+                            api_provider_mode: Some(CodexApiProviderMode::OpenAI),
+                            quota: None,
+                            created_at: Some(chrono::Utc::now().to_rfc3339()),
+                            last_used: None,
+                            last_refresh: None,
+                        };
+                        account
+                    }
+                };
+                self.upsert_account(account.clone())?;
+                Ok(Some(account))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub fn import_json_accounts(&self, json_data: &str) -> Result<ImportResult, CodexError> {
+        let mut imported = Vec::new();
+        let mut failed = Vec::new();
+
+        match serde_json::from_str::<CodexAccountIndex>(json_data) {
+            Ok(index) => {
+                for account in index.accounts {
+                    match self.import_single_account(account.clone()) {
+                        Ok(a) => imported.push(a),
+                        Err(e) => failed.push(ImportFailure {
+                            account_id: account.id.clone(),
+                            error: e.to_string(),
+                        }),
+                    }
+                }
+            }
+            Err(_) => match serde_json::from_str::<Vec<CodexAccount>>(json_data) {
+                Ok(accounts) => {
+                    for account in accounts {
+                        match self.import_single_account(account.clone()) {
+                            Ok(a) => imported.push(a),
+                            Err(e) => failed.push(ImportFailure {
+                                account_id: account.id.clone(),
+                                error: e.to_string(),
+                            }),
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(CodexError::Import(format!("Invalid import format: {e}")));
+                }
+            },
+        }
+
+        Ok(ImportResult { imported, failed })
+    }
+
+    fn import_single_account(&self, account: CodexAccount) -> Result<CodexAccount, CodexError> {
+        if account.id.is_empty() {
+            return Err(CodexError::Import("Account ID is required".into()));
+        }
+        self.upsert_account(account.clone())?;
+        Ok(account)
+    }
+
+    pub fn export_accounts(&self, account_ids: &[String]) -> Result<Vec<CodexAccount>, CodexError> {
+        let ids = if account_ids.is_empty() {
+            let index = self.load_index()?;
+            index.accounts.iter().map(|a| a.id.clone()).collect()
+        } else {
+            account_ids.to_vec()
+        };
+
+        let mut result = Vec::new();
+        for id in &ids {
+            if let Some(account) = self.load_account_file_opt(id)? {
+                let sanitized = self.sanitize_for_export(account);
+                result.push(sanitized);
+            }
+        }
+        Ok(result)
+    }
+
+    fn sanitize_for_export(&self, mut account: CodexAccount) -> CodexAccount {
+        account.api_key = None;
+        account
+    }
+
+    pub fn account_from_oauth_tokens(
+        &self,
+        tokens: &CodexTokens,
+    ) -> Result<CodexAccount, CodexError> {
+        if let Some(ref id_token) = tokens.id_token {
+            use crate::domain::oauth::{decode_jwt_payload, extract_account_from_tokens};
+            let (payload, _) = decode_jwt_payload(id_token)?;
+            extract_account_from_tokens(tokens, Some(&payload))
+        } else {
+            let id = format!(
+                "acct_oauth_{}",
+                &uuid::Uuid::new_v4().to_string().replace('-', "_")[..16]
+            );
+            Ok(CodexAccount {
+                id,
+                provider: "codex".into(),
+                auth_mode: CodexAuthMode::OAuth,
+                email: None,
+                plan_type: None,
+                account_id: None,
+                organization_id: None,
+                organizations: vec![],
+                display_name: "OAuth Account".into(),
+                tags: vec![],
+                tokens: tokens.clone(),
+                api_key: None,
+                base_url: None,
+                provider_id: None,
+                provider_name: None,
+                api_provider_mode: None,
+                quota: None,
+                created_at: Some(chrono::Utc::now().to_rfc3339()),
+                last_used: None,
+                last_refresh: Some(chrono::Utc::now().to_rfc3339()),
+            })
+        }
+    }
+
+    pub fn profile_refresh(
+        &self,
+        account_id: &str,
+        profile_data: &AccountProfile,
+    ) -> Result<(), CodexError> {
+        let mut index = self.load_index()?;
+        let account_idx = index
+            .accounts
+            .iter()
+            .position(|a| a.id == account_id)
+            .ok_or_else(|| CodexError::NotFound(format!("Account not found: {account_id}")))?;
+
+        let account = &mut index.accounts[account_idx];
+        if let Some(ref email) = profile_data.email {
+            account.email = Some(email.clone());
+        }
+        if let Some(ref plan_type) = profile_data.plan_type {
+            account.plan_type = Some(plan_type.clone());
+        }
+        if !profile_data.organizations.is_empty() {
+            account.organizations = profile_data.organizations.clone();
+        }
+        account.last_refresh = Some(chrono::Utc::now().to_rfc3339());
+
+        self.save_index(&index)?;
+        let account_clone = index.accounts[account_idx].clone();
+        self.save_account_file(&account_clone)?;
+        Ok(())
+    }
+
+    pub fn switch_account_managed(&self, account_id: &str) -> Result<CodexAccount, CodexError> {
+        let account = self.load_account_file(account_id)?;
+        if account.is_api_key() {
+            return Err(CodexError::InvalidState(
+                "Cannot switch to API key account via managed flow. Use quick switch instead."
+                    .into(),
+            ));
+        }
+
+        self.set_current_account(account_id)?;
+
+        let now = chrono::Utc::now().to_rfc3339();
+        let auth_file = self.build_auth_file_for_account(&account)?;
+        self.write_auth_file(&self.paths.auth_file, &auth_file)?;
+
+        self.update_account_last_used(account_id, &now)?;
+
+        Ok(account)
+    }
+
+    pub fn build_auth_file_for_account(
+        &self,
+        account: &CodexAccount,
+    ) -> Result<CodexAuthFile, CodexError> {
+        match account.auth_mode {
+            CodexAuthMode::OAuth => Ok(CodexAuthFile {
+                auth_mode: CodexAuthMode::OAuth,
+                tokens: Some(account.tokens.clone()),
+                api_key: None,
+                base_url: None,
+            }),
+            CodexAuthMode::ApiKey => {
+                if account.api_key.is_none() || account.base_url.is_none() {
+                    return Err(CodexError::AccountStore(
+                        "API key account missing credentials".into(),
+                    ));
+                }
+                Ok(CodexAuthFile {
+                    auth_mode: CodexAuthMode::ApiKey,
+                    tokens: None,
+                    api_key: account.api_key.clone(),
+                    base_url: account.base_url.clone(),
+                })
+            }
+        }
+    }
+
+    pub fn prepare_account_for_injection(
+        &self,
+        account_id: &str,
+    ) -> Result<CodexAuthFile, CodexError> {
+        let account = self.load_account_file(account_id)?;
+        self.build_auth_file_for_account(&account)
+    }
+
+    pub fn activate_api_key_for_local_access(
+        &self,
+        api_key: &str,
+        base_url: &str,
+    ) -> Result<(), CodexError> {
+        let auth = CodexAuthFile {
+            auth_mode: CodexAuthMode::ApiKey,
+            tokens: None,
+            api_key: Some(api_key.to_string()),
+            base_url: Some(base_url.to_string()),
+        };
+        self.write_auth_file(&self.paths.auth_file, &auth)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportResult {
+    pub imported: Vec<CodexAccount>,
+    pub failed: Vec<ImportFailure>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportFailure {
+    pub account_id: String,
+    pub error: String,
 }
 
 #[cfg(test)]
