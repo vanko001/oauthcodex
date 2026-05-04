@@ -89,6 +89,87 @@ fn add_api_key_account_matches_source_id_and_switches_to_auth_json() {
         "sk-test_openai_api_key_mock_value_123"
     );
     assert!(value.get("api_key").is_none());
+    assert!(value.get("base_url").is_none());
+}
+
+#[test]
+fn switch_oauth_writes_source_compatible_official_auth_json() {
+    let tmp = TempDir::new().expect("temp dir");
+    let store = setup_store(&tmp);
+    let account = CodexAccount {
+        id: "acct_oauth_switch_001".into(),
+        provider: "codex".into(),
+        auth_mode: CodexAuthMode::OAuth,
+        email: Some("switch@example.com".into()),
+        plan_type: Some("pro".into()),
+        account_id: Some("chatgpt_acct_switch_001".into()),
+        organization_id: Some("org_switch_001".into()),
+        organizations: vec![],
+        display_name: "Switch Account".into(),
+        tags: vec![],
+        tokens: CodexTokens {
+            access_token: Some("at_switch".into()),
+            refresh_token: Some("rt_switch".into()),
+            id_token: Some("jwt_switch".into()),
+            token_type: Some("Bearer".into()),
+            expires_at: None,
+            scope: None,
+        },
+        api_key: None,
+        base_url: None,
+        provider_id: None,
+        provider_name: None,
+        api_provider_mode: None,
+        quota: None,
+        created_at: None,
+        last_used: None,
+        last_refresh: None,
+    };
+    store.upsert_account(account.clone()).expect("upsert oauth");
+
+    store.switch_account_managed(&account.id).expect("switch");
+
+    let auth_json =
+        std::fs::read_to_string(&store.paths.auth_file).expect("read generated auth json");
+    let value: serde_json::Value = serde_json::from_str(&auth_json).expect("parse auth json");
+    assert!(value.get("auth_mode").is_none());
+    assert!(value.get("OPENAI_API_KEY").is_some());
+    assert!(value["OPENAI_API_KEY"].is_null());
+    assert_eq!(value["tokens"]["access_token"], "at_switch");
+    assert_eq!(value["tokens"]["refresh_token"], "rt_switch");
+    assert_eq!(value["tokens"]["id_token"], "jwt_switch");
+    assert_eq!(value["tokens"]["account_id"], "chatgpt_acct_switch_001");
+    assert!(value.get("last_refresh").is_some());
+}
+
+#[test]
+fn switch_openai_api_key_account_writes_base_url_to_config_toml() {
+    let tmp = TempDir::new().expect("temp dir");
+    let store = setup_store(&tmp);
+    let account = store
+        .upsert_api_key_account(
+            "sk-test_custom_base_key_123",
+            Some("https://relay.example.com/v1"),
+            Some(CodexApiProviderMode::OpenAI),
+            None,
+            Some("OpenAI Relay"),
+        )
+        .expect("upsert api key");
+
+    store.switch_account_managed(&account.id).expect("switch");
+
+    let auth_json =
+        std::fs::read_to_string(&store.paths.auth_file).expect("read generated auth json");
+    let value: serde_json::Value = serde_json::from_str(&auth_json).expect("parse auth json");
+    assert_eq!(value["auth_mode"], "apikey");
+    assert_eq!(value["OPENAI_API_KEY"], "sk-test_custom_base_key_123");
+    assert!(value.get("base_url").is_none());
+
+    let config = std::fs::read_to_string(&store.paths.config_file).expect("read config");
+    assert!(config.contains("openai_base_url = \"https://relay.example.com/v1\""));
+    assert!(!config
+        .lines()
+        .any(|line| line.trim_start().starts_with("base_url =")));
 }
 
 #[test]

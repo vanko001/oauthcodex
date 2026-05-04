@@ -1,17 +1,68 @@
 use crate::adapters::fs_store::{
-    read_json_file, read_json_file_opt, write_json_atomic, CodexPaths,
+    read_json_file, read_json_file_opt, write_json_atomic, write_string_atomic, CodexPaths,
 };
 use crate::domain::api_key::validate_api_key;
 use crate::domain::codex_models::*;
 use crate::error::CodexError;
+use serde_json::{Map, Value};
 use std::path::Path;
 use std::sync::{Arc, LazyLock, Mutex};
+use toml_edit::value;
 
 const DEFAULT_VERSION: &str = "1.0";
 const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 static TOKEN_REFRESH_LOCKS: LazyLock<
     Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 > = LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+
+fn optional_non_empty(value: &Option<String>) -> Option<String> {
+    value.as_deref().and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn required_token(value: &Option<String>, label: &str) -> Result<String, CodexError> {
+    optional_non_empty(value).ok_or_else(|| {
+        CodexError::AccountStore(format!(
+            "OAuth account missing {label}, cannot write auth.json"
+        ))
+    })
+}
+
+fn normalize_non_default_base_url(raw: &str) -> Option<String> {
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case(DEFAULT_OPENAI_BASE_URL) {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn derive_provider_id(name: &str, base_url: &str) -> String {
+    let seed = format!("{name} {base_url}");
+    let mut normalized = String::new();
+    let mut previous_separator = false;
+    for ch in seed.chars() {
+        if ch.is_ascii_alphanumeric() {
+            normalized.push(ch.to_ascii_lowercase());
+            previous_separator = false;
+        } else if !previous_separator {
+            normalized.push('_');
+            previous_separator = true;
+        }
+    }
+    let normalized = normalized.trim_matches('_');
+    if normalized.is_empty() {
+        "custom".to_string()
+    } else {
+        normalized.to_string()
+    }
+}
 
 pub struct AccountStore {
     pub paths: CodexPaths,
@@ -808,16 +859,139 @@ impl AccountStore {
 
     pub fn switch_account_managed(&self, account_id: &str) -> Result<CodexAccount, CodexError> {
         let account = self.load_account_file(account_id)?;
+        let now = chrono::Utc::now().to_rfc3339();
+
+        let auth_file = self.build_official_auth_file_value(&account, &now)?;
+        write_json_atomic(&self.paths.auth_file, &auth_file)?;
+        self.write_api_provider_to_config_toml(&account)?;
 
         self.set_current_account(account_id)?;
-
-        let now = chrono::Utc::now().to_rfc3339();
-        let auth_file = self.build_auth_file_for_account(&account)?;
-        self.write_auth_file(&self.paths.auth_file, &auth_file)?;
 
         self.update_account_last_used(account_id, &now)?;
 
         Ok(account)
+    }
+
+    fn build_official_auth_file_value(
+        &self,
+        account: &CodexAccount,
+        now: &str,
+    ) -> Result<Value, CodexError> {
+        match account.auth_mode {
+            CodexAuthMode::OAuth => {
+                let id_token = required_token(&account.tokens.id_token, "id_token")?;
+                let access_token = required_token(&account.tokens.access_token, "access_token")?;
+
+                let mut tokens = Map::new();
+                tokens.insert("id_token".into(), Value::String(id_token));
+                tokens.insert("access_token".into(), Value::String(access_token));
+                if let Some(refresh_token) = optional_non_empty(&account.tokens.refresh_token) {
+                    tokens.insert("refresh_token".into(), Value::String(refresh_token));
+                }
+                if let Some(account_id) = optional_non_empty(&account.account_id) {
+                    tokens.insert("account_id".into(), Value::String(account_id));
+                }
+
+                let mut root = Map::new();
+                root.insert("OPENAI_API_KEY".into(), Value::Null);
+                root.insert("tokens".into(), Value::Object(tokens));
+                root.insert("last_refresh".into(), Value::String(now.to_string()));
+                Ok(Value::Object(root))
+            }
+            CodexAuthMode::ApiKey => {
+                let api_key = optional_non_empty(&account.api_key).ok_or_else(|| {
+                    CodexError::AccountStore("API key account missing credentials".into())
+                })?;
+                let mut root = Map::new();
+                root.insert("auth_mode".into(), Value::String("apikey".into()));
+                root.insert("OPENAI_API_KEY".into(), Value::String(api_key));
+                Ok(Value::Object(root))
+            }
+        }
+    }
+
+    fn write_api_provider_to_config_toml(&self, account: &CodexAccount) -> Result<(), CodexError> {
+        let provider_mode = if account.auth_mode == CodexAuthMode::ApiKey {
+            account
+                .api_provider_mode
+                .clone()
+                .unwrap_or(CodexApiProviderMode::OpenAI)
+        } else {
+            CodexApiProviderMode::OpenAI
+        };
+        let base_url = if account.auth_mode == CodexAuthMode::ApiKey {
+            account
+                .base_url
+                .as_deref()
+                .and_then(normalize_non_default_base_url)
+        } else {
+            None
+        };
+
+        if !self.paths.config_file.exists() && base_url.is_none() {
+            return Ok(());
+        }
+
+        let existing = std::fs::read_to_string(&self.paths.config_file).unwrap_or_default();
+        let mut doc = if existing.trim().is_empty() {
+            toml_edit::DocumentMut::new()
+        } else {
+            existing
+                .parse::<toml_edit::DocumentMut>()
+                .map_err(|e| CodexError::Toml(format!("Failed to parse config TOML: {e}")))?
+        };
+
+        match provider_mode {
+            CodexApiProviderMode::OpenAI => {
+                doc.remove("model_provider");
+                match base_url {
+                    Some(base_url) => {
+                        doc["openai_base_url"] = value(base_url.as_str());
+                    }
+                    None => {
+                        doc.remove("openai_base_url");
+                    }
+                }
+            }
+            CodexApiProviderMode::Custom | CodexApiProviderMode::Azure => {
+                doc.remove("openai_base_url");
+                let base_url = base_url.ok_or_else(|| {
+                    CodexError::Config("Custom Codex API provider missing base URL".into())
+                })?;
+                let provider_id = optional_non_empty(&account.provider_id).unwrap_or_else(|| {
+                    derive_provider_id(
+                        account.provider_name.as_deref().unwrap_or("custom"),
+                        base_url.as_str(),
+                    )
+                });
+                let provider_name = optional_non_empty(&account.provider_name)
+                    .unwrap_or_else(|| provider_id.clone());
+
+                doc["model_provider"] = value(provider_id.as_str());
+                if !doc.contains_key("model_providers") {
+                    doc["model_providers"] = toml_edit::table();
+                }
+                let model_providers = doc["model_providers"].as_table_mut().ok_or_else(|| {
+                    CodexError::Config("config.toml model_providers is not a table".into())
+                })?;
+                if !model_providers.contains_key(&provider_id) {
+                    model_providers[provider_id.as_str()] = toml_edit::table();
+                }
+                let provider_table = model_providers[provider_id.as_str()]
+                    .as_table_mut()
+                    .ok_or_else(|| {
+                        CodexError::Config(
+                            "config.toml target model provider is not a table".into(),
+                        )
+                    })?;
+                provider_table["name"] = value(provider_name.as_str());
+                provider_table["base_url"] = value(base_url.as_str());
+                provider_table["wire_api"] = value("responses");
+                provider_table["requires_openai_auth"] = value(true);
+            }
+        }
+
+        write_string_atomic(&self.paths.config_file, &doc.to_string())
     }
 
     pub fn build_auth_file_for_account(

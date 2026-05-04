@@ -23,7 +23,7 @@ pub struct CodexPaths {
 impl CodexPaths {
     pub fn new() -> Result<Self, CodexError> {
         let home = dirs_home()?;
-        let codex_dir = home.join(".codex");
+        let codex_dir = codex_home_from_env().unwrap_or_else(|| home.join(".codex"));
         let cockpit_dir = home.join(".antigravity_cockpit");
         let account_dir = cockpit_dir.join("codex_accounts");
 
@@ -74,6 +74,21 @@ impl CodexPaths {
         fs::create_dir_all(&self.cockpit_dir).map_err(CodexError::Io)?;
         fs::create_dir_all(&self.account_dir).map_err(CodexError::Io)?;
         Ok(())
+    }
+}
+
+fn codex_home_from_env() -> Option<PathBuf> {
+    let raw = std::env::var("CODEX_HOME").ok()?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let unquoted = trimmed.trim_matches('"').trim_matches('\'').trim();
+    if unquoted.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(unquoted))
     }
 }
 
@@ -153,9 +168,16 @@ pub fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> Result<
         fs::create_dir_all(parent).map_err(CodexError::Io)?;
     }
     let data = serde_json::to_string_pretty(value)?;
+    write_string_atomic(path, &data)
+}
+
+pub fn write_string_atomic(path: &Path, data: &str) -> Result<(), CodexError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(CodexError::Io)?;
+    }
     let tmp = NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new("/tmp")))
         .map_err(CodexError::Io)?;
-    fs::write(tmp.path(), &data).map_err(CodexError::Io)?;
+    fs::write(tmp.path(), data).map_err(CodexError::Io)?;
     tmp.persist(path).map_err(|e| {
         CodexError::Io(std::io::Error::other(format!(
             "Atomic write failed for {}: {e}",
