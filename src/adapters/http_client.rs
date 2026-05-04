@@ -58,9 +58,9 @@ impl HttpClient {
                 }
                 _ => {
                     return Err(CodexError::Http(format!(
-                        "Token exchange HTTP {}: {}",
+                        "Token exchange HTTP {}: body_len={}",
                         status.as_u16(),
-                        &body_text[..std::cmp::min(body_text.len(), 500)]
+                        body_text.len()
                     )));
                 }
             }
@@ -111,9 +111,9 @@ impl HttpClient {
                 }
                 _ => {
                     return Err(CodexError::Http(format!(
-                        "Token refresh HTTP {}: {}",
+                        "Token refresh HTTP {}: body_len={}",
                         status.as_u16(),
-                        &body_text[..std::cmp::min(body_text.len(), 500)]
+                        body_text.len()
                     )));
                 }
             }
@@ -129,10 +129,26 @@ impl HttpClient {
     }
 
     pub async fn get_usage(&self, url: &str, bearer_token: &str) -> Result<String, CodexError> {
-        let response = self
+        self.get_usage_for_account(url, bearer_token, None).await
+    }
+
+    pub async fn get_usage_for_account(
+        &self,
+        url: &str,
+        bearer_token: &str,
+        account_id: Option<&str>,
+    ) -> Result<String, CodexError> {
+        let mut request = self
             .client
             .get(url)
             .bearer_auth(bearer_token)
+            .header(reqwest::header::ACCEPT, "application/json");
+
+        if let Some(account_id) = account_id.filter(|id| !id.is_empty()) {
+            request = request.header("ChatGPT-Account-Id", account_id);
+        }
+
+        let response = request
             .send()
             .await
             .map_err(|e| CodexError::Http(format!("Usage API request failed: {e}")))?;
@@ -145,9 +161,9 @@ impl HttpClient {
 
         if !status.is_success() {
             return Err(CodexError::Http(format!(
-                "Usage API HTTP {}: {}",
+                "Usage API HTTP {}: body_len={}",
                 status.as_u16(),
-                &body[..std::cmp::min(body.len(), 500)]
+                body.len()
             )));
         }
 
@@ -175,9 +191,9 @@ impl HttpClient {
 
         if !status.is_success() {
             return Err(CodexError::Http(format!(
-                "Profile API HTTP {}: {}",
+                "Profile API HTTP {}: body_len={}",
                 status.as_u16(),
-                &body[..std::cmp::min(body.len(), 500)]
+                body.len()
             )));
         }
 

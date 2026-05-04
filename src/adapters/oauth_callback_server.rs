@@ -1,4 +1,6 @@
 use crate::adapters::events::EventEmitter;
+use crate::adapters::fs_store::{read_json_file_opt, write_json_atomic};
+use crate::domain::codex_models::CodexPendingOAuthState;
 use crate::domain::oauth::OAuthEvent;
 use crate::error::CodexError;
 use axum::{
@@ -19,7 +21,7 @@ pub struct CallbackServerState {
     pub code_verifier: String,
     pub emitter: Arc<EventEmitter>,
     pub pending_file_path: std::path::PathBuf,
-    pub timeout_sender: Arc<StdMutex<Option<oneshot::Sender<()>>>>,
+    pub shutdown_sender: Arc<StdMutex<Option<oneshot::Sender<()>>>>,
     pub result_sender: Arc<StdMutex<Option<oneshot::Sender<CallbackResult>>>>,
 }
 
@@ -46,45 +48,42 @@ async fn handle_callback(
     State(state): State<Arc<CallbackServerState>>,
     Query(params): Query<CallbackParams>,
 ) -> impl IntoResponse {
+    if let Some(error) = params.error.as_deref() {
+        let message = params
+            .error_description
+            .clone()
+            .unwrap_or_else(|| error.to_string());
+        send_result_once(&state, CallbackResult::Cancelled);
+        state.emitter.emit(OAuthEvent::LoginError {
+            login_id: state.login_id.clone(),
+            error: message,
+        });
+        request_shutdown(&state);
+        return Html(ERROR_HTML_NO_CODE.to_string());
+    }
+
     match &params.code {
         Some(code) if !code.is_empty() => {
             let state_match = params.state.as_deref() == Some(&state.expected_state);
             if state_match {
-                if let Ok(mut guard) = state.result_sender.lock() {
-                    if let Some(sender) = guard.take() {
-                        let _ = sender.send(CallbackResult::Completed {
-                            code: code.clone(),
-                            state: state.expected_state.clone(),
-                        });
-                    }
-                }
+                let _ = persist_callback_code(&state, code);
+                send_result_once(
+                    &state,
+                    CallbackResult::Completed {
+                        code: code.clone(),
+                        state: state.expected_state.clone(),
+                    },
+                );
                 state.emitter.emit(OAuthEvent::LoginCompleted {
                     login_id: state.login_id.clone(),
-                    account: Box::new(crate::domain::codex_models::CodexAccount {
-                        id: format!("pending_{}", state.login_id),
-                        provider: "codex".into(),
-                        auth_mode: crate::domain::codex_models::CodexAuthMode::OAuth,
-                        email: None,
-                        plan_type: None,
-                        account_id: None,
-                        organization_id: None,
-                        organizations: vec![],
-                        display_name: "".into(),
-                        tags: vec![],
-                        tokens: crate::domain::codex_models::CodexTokens::empty(),
-                        api_key: None,
-                        base_url: None,
-                        provider_id: None,
-                        provider_name: None,
-                        api_provider_mode: None,
-                        quota: None,
-                        created_at: None,
-                        last_used: None,
-                        last_refresh: None,
-                    }),
                 });
+                request_shutdown(&state);
                 Html(SUCCESS_HTML.to_string())
             } else {
+                state.emitter.emit(OAuthEvent::LoginError {
+                    login_id: state.login_id.clone(),
+                    error: "State mismatch".into(),
+                });
                 Html(ERROR_HTML_STATE_MISMATCH.to_string())
             }
         }
@@ -93,15 +92,48 @@ async fn handle_callback(
 }
 
 async fn handle_cancel(State(state): State<Arc<CallbackServerState>>) -> impl IntoResponse {
-    if let Ok(mut guard) = state.result_sender.lock() {
-        if let Some(sender) = guard.take() {
-            let _ = sender.send(CallbackResult::Cancelled);
-        }
-    }
+    send_result_once(&state, CallbackResult::Cancelled);
     state.emitter.emit(OAuthEvent::LoginCancelled {
         login_id: state.login_id.clone(),
     });
+    request_shutdown(&state);
     Html("<h1>Login cancelled</h1><p>You can close this window.</p>".to_string())
+}
+
+fn send_result_once(state: &CallbackServerState, result: CallbackResult) {
+    if let Ok(mut guard) = state.result_sender.lock() {
+        if let Some(sender) = guard.take() {
+            let _ = sender.send(result);
+        }
+    }
+}
+
+fn request_shutdown(state: &CallbackServerState) {
+    if let Ok(mut guard) = state.shutdown_sender.lock() {
+        if let Some(sender) = guard.take() {
+            let _ = sender.send(());
+        }
+    }
+}
+
+fn persist_callback_code(state: &CallbackServerState, code: &str) -> Result<(), CodexError> {
+    let mut pending: CodexPendingOAuthState = read_json_file_opt(&state.pending_file_path)?
+        .ok_or_else(|| {
+            CodexError::OAuth(format!(
+                "OAuth pending state not found: {}",
+                state.pending_file_path.display()
+            ))
+        })?;
+
+    if pending.login_id != state.login_id {
+        return Err(CodexError::AuthState(format!(
+            "Stale login id: expected {} got {}",
+            pending.login_id, state.login_id
+        )));
+    }
+
+    pending.code = Some(code.to_string());
+    write_json_atomic(&state.pending_file_path, &pending)
 }
 
 const SUCCESS_HTML: &str = r#"<!DOCTYPE html>
@@ -145,10 +177,10 @@ pub fn start_callback_server(
     code_verifier: String,
     emitter: Arc<EventEmitter>,
     pending_file_path: std::path::PathBuf,
-    _timeout_secs: u64,
+    timeout_secs: u64,
 ) -> Result<oneshot::Receiver<CallbackResult>, CodexError> {
     let (result_sender, result_receiver) = oneshot::channel();
-    let (_timeout_sender, _timeout_receiver) = oneshot::channel();
+    let (shutdown_sender, shutdown_receiver) = oneshot::channel();
 
     let state = Arc::new(CallbackServerState {
         login_id,
@@ -156,10 +188,11 @@ pub fn start_callback_server(
         code_verifier,
         emitter,
         pending_file_path,
-        timeout_sender: Arc::new(StdMutex::new(Some(_timeout_sender))),
+        shutdown_sender: Arc::new(StdMutex::new(Some(shutdown_sender))),
         result_sender: Arc::new(StdMutex::new(Some(result_sender))),
     });
 
+    let timeout_state = state.clone();
     let app = build_callback_app(state);
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
@@ -177,7 +210,21 @@ pub fn start_callback_server(
             .unwrap();
         rt.block_on(async {
             let listener = tokio::net::TcpListener::from_std(listener).unwrap();
-            axum::serve(listener, app).await.unwrap();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(timeout_secs)).await;
+                send_result_once(&timeout_state, CallbackResult::Timeout);
+                timeout_state.emitter.emit(OAuthEvent::LoginTimeout {
+                    login_id: timeout_state.login_id.clone(),
+                });
+                request_shutdown(&timeout_state);
+            });
+
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = shutdown_receiver.await;
+                })
+                .await
+                .unwrap();
         });
     });
 

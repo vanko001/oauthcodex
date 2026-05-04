@@ -12,6 +12,9 @@ pub struct ImportReport {
     pub unresolved_account_refs: Vec<String>,
     pub imported_groups: usize,
     pub imported_providers: usize,
+    pub imported_instances: usize,
+    pub imported_wakeup_tasks: usize,
+    pub imported_current_refresh_entries: usize,
     pub warnings: Vec<String>,
 }
 
@@ -87,6 +90,25 @@ impl DataTransferService {
         provider_store: &mut ModelProviderStore,
         bundle: &DataTransferExport,
     ) -> Result<ImportReport, CodexError> {
+        self.import_bundle_full(
+            account_store,
+            group_store,
+            provider_store,
+            None,
+            None,
+            bundle,
+        )
+    }
+
+    pub fn import_bundle_full(
+        &self,
+        account_store: &AccountStore,
+        group_store: &mut GroupStore,
+        provider_store: &mut ModelProviderStore,
+        instance_store: Option<&mut InstanceStore>,
+        wakeup_scheduler: Option<&mut WakeupScheduler>,
+        bundle: &DataTransferExport,
+    ) -> Result<ImportReport, CodexError> {
         let mut unresolved_account_refs = Vec::new();
         let mut warnings = Vec::new();
 
@@ -153,10 +175,59 @@ impl DataTransferService {
             }
         }
 
+        let mut imported_instances = 0;
+        if let (Some(store), Some(instance_refs)) = (instance_store, &bundle.codex_instance_stores)
+        {
+            for instance_ref in instance_refs {
+                if store.find_by_id(&instance_ref.id).is_some() {
+                    warnings.push(format!(
+                        "Duplicate instance id: {} (name: {})",
+                        instance_ref.id, instance_ref.name
+                    ));
+                    continue;
+                }
+
+                match store.import_ref(instance_ref.clone()) {
+                    Ok(()) => imported_instances += 1,
+                    Err(e) => warnings.push(format!(
+                        "Failed to import instance {}: {}",
+                        instance_ref.id, e
+                    )),
+                }
+            }
+        } else if bundle.codex_instance_stores.is_some() {
+            warnings.push(
+                "Bundle contains instance stores but no instance import target was provided".into(),
+            );
+        }
+
+        let mut imported_wakeup_tasks = 0;
+        let mut imported_current_refresh_entries = 0;
+
+        if let Some(scheduler) = wakeup_scheduler {
+            scheduler.replace_state(bundle.codex_wakeup_state.clone());
+            scheduler.set_current_refresh_map(bundle.current_account_refresh_map.clone());
+            imported_wakeup_tasks = bundle
+                .codex_wakeup_state
+                .as_ref()
+                .map(|state| state.tasks.len())
+                .unwrap_or(0);
+            imported_current_refresh_entries = bundle.current_account_refresh_map.len();
+        } else if bundle.codex_wakeup_state.is_some()
+            || !bundle.current_account_refresh_map.is_empty()
+        {
+            warnings.push(
+                "Bundle contains wakeup state but no wakeup import target was provided".into(),
+            );
+        }
+
         Ok(ImportReport {
             unresolved_account_refs,
             imported_groups: bundle.codex_account_groups.len(),
             imported_providers: bundle.codex_model_providers.len(),
+            imported_instances,
+            imported_wakeup_tasks,
+            imported_current_refresh_entries,
             warnings,
         })
     }

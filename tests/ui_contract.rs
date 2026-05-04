@@ -1,6 +1,3 @@
-use oauthcodex::domain::codex_models::CodexAccount;
-use oauthcodex::domain::codex_models::CodexAuthMode;
-use oauthcodex::domain::codex_models::CodexTokens;
 use oauthcodex::domain::oauth::OAuthEvent;
 use oauthcodex::domain::preferences;
 use std::path::PathBuf;
@@ -73,28 +70,6 @@ fn test_preference_key_current_account() {
 fn test_oauth_event_name_login_completed() {
     let event = OAuthEvent::LoginCompleted {
         login_id: "test".into(),
-        account: Box::new(CodexAccount {
-            id: "test".into(),
-            provider: "codex".into(),
-            auth_mode: CodexAuthMode::OAuth,
-            email: None,
-            plan_type: None,
-            account_id: None,
-            organization_id: None,
-            organizations: vec![],
-            display_name: "test".into(),
-            tags: vec![],
-            tokens: CodexTokens::empty(),
-            api_key: None,
-            base_url: None,
-            provider_id: None,
-            provider_name: None,
-            api_provider_mode: None,
-            quota: None,
-            created_at: None,
-            last_used: None,
-            last_refresh: None,
-        }),
     };
     assert_eq!(event.event_name(), "codex-oauth-login-completed");
 }

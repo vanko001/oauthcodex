@@ -1,6 +1,6 @@
 use oauthcodex::adapters::events::EventEmitter;
 use oauthcodex::adapters::fs_store::CodexPaths;
-use oauthcodex::domain::codex_models::*;
+use oauthcodex::domain::codex_models::CodexTokens;
 use oauthcodex::domain::oauth::{
     generate_pkce_verifier, parse_query_pairs, OAuthConfig, OAuthEvent, OAuthPending, OAuthService,
 };
@@ -76,6 +76,9 @@ fn test_start_with_expired_pending_creates_new() {
         state: pending1.state.clone(),
         code_verifier: pending1.code_verifier.clone(),
         code_challenge: pending1.code_challenge.clone(),
+        redirect_uri: pending1.redirect_uri.clone(),
+        port,
+        code: None,
         created_at: "2020-01-01T00:00:00Z".into(),
         expires_at: "2020-01-01T00:05:00Z".into(),
     };
@@ -130,7 +133,7 @@ fn test_complete_rejects_stale_login_id() {
 #[test]
 fn test_auth_url_constants_match_fixture() {
     let config = OAuthConfig::default();
-    assert_eq!(config.client_id, "U2BcmqLqFwsFpMk8T5r5GqVqVBFx5RkP");
+    assert_eq!(config.client_id, "app_EMoamEEZ73f0CkXaXp7hrann");
     assert_eq!(
         config.auth_endpoint,
         "https://auth.openai.com/oauth/authorize"
@@ -144,6 +147,24 @@ fn test_auth_url_constants_match_fixture() {
     assert_eq!(config.originator, "codex_vscode");
     assert_eq!(config.timeout_secs, 300);
     assert_eq!(config.callback_port, 1455);
+}
+
+#[test]
+fn test_auth_url_uses_actual_callback_port() {
+    let (svc, _tmp) = setup();
+    let port = free_port();
+
+    let (auth_url, _, pending) = svc.start_oauth_login(port).expect("start");
+
+    assert!(auth_url.contains(&format!(
+        "redirect_uri=http%3A%2F%2Flocalhost%3A{}%2Fauth%2Fcallback",
+        port
+    )));
+    assert_eq!(pending.port, port);
+    assert_eq!(
+        pending.redirect_uri,
+        format!("http://localhost:{port}/auth/callback")
+    );
 }
 
 #[test]
@@ -166,28 +187,6 @@ fn test_event_emitter_oauth_events() {
     });
     emitter.emit(OAuthEvent::LoginCompleted {
         login_id: "test".into(),
-        account: Box::new(CodexAccount {
-            id: "test".into(),
-            provider: "codex".into(),
-            auth_mode: CodexAuthMode::OAuth,
-            email: None,
-            plan_type: None,
-            account_id: None,
-            organization_id: None,
-            organizations: vec![],
-            display_name: "test".into(),
-            tags: vec![],
-            tokens: CodexTokens::empty(),
-            api_key: None,
-            base_url: None,
-            provider_id: None,
-            provider_name: None,
-            api_provider_mode: None,
-            quota: None,
-            created_at: None,
-            last_used: None,
-            last_refresh: None,
-        }),
     });
     assert!(*completed.lock().unwrap());
 }

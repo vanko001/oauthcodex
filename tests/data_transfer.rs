@@ -287,3 +287,75 @@ fn test_import_bundle_with_mixed_valid_invalid_account_refs() {
     assert_eq!(report.imported_providers, 1);
     assert_eq!(provider_store.providers().len(), 1);
 }
+
+#[test]
+fn test_import_bundle_full_restores_instances_wakeup_and_refresh_map() {
+    let tmp = TempDir::new().expect("temp dir");
+    let service = setup_service(&tmp);
+    let account_store = setup_account_store(&tmp);
+
+    let mut group_store = GroupStore::new();
+    let mut provider_store = ModelProviderStore::new();
+    let mut instance_store = InstanceStore::new();
+    let mut wakeup_scheduler = WakeupScheduler::new();
+
+    let mut refresh_map = HashMap::new();
+    refresh_map.insert("acct_valid".to_string(), 15);
+
+    let bundle = DataTransferExport {
+        version: 1,
+        export_type: "codex_only".to_string(),
+        account_refs: vec![],
+        codex_account_groups: vec![],
+        codex_model_providers: vec![],
+        codex_instance_stores: Some(vec![CodexInstanceStoreRef {
+            id: "inst_codex_imported".to_string(),
+            name: "Imported".to_string(),
+            is_default: true,
+        }]),
+        codex_wakeup_state: Some(WakeupState {
+            runtime_config: Some(WakeupRuntimeConfig {
+                runtime_path: Some("/usr/bin/node".to_string()),
+                node_path: None,
+                cli_path: Some("/usr/local/bin/codex".to_string()),
+            }),
+            tasks: vec![WakeupTask {
+                id: "wt_imported".to_string(),
+                name: "Imported task".to_string(),
+                schedule: WakeupSchedule {
+                    kind: WakeupScheduleKind::Interval,
+                    time: None,
+                    interval_minutes: Some(30),
+                    delay_seconds: None,
+                    days_of_week: None,
+                },
+                enabled: true,
+                account_id: Some("acct_valid".to_string()),
+                preset_id: None,
+                description: None,
+            }],
+        }),
+        current_account_refresh_map: refresh_map,
+    };
+
+    let report = service
+        .import_bundle_full(
+            &account_store,
+            &mut group_store,
+            &mut provider_store,
+            Some(&mut instance_store),
+            Some(&mut wakeup_scheduler),
+            &bundle,
+        )
+        .expect("import full");
+
+    assert_eq!(report.imported_instances, 1);
+    assert_eq!(report.imported_wakeup_tasks, 1);
+    assert_eq!(report.imported_current_refresh_entries, 1);
+    assert!(instance_store.find_by_id("inst_codex_imported").is_some());
+    assert_eq!(wakeup_scheduler.tasks().len(), 1);
+    assert_eq!(
+        wakeup_scheduler.current_refresh_map().get("acct_valid"),
+        Some(&15)
+    );
+}

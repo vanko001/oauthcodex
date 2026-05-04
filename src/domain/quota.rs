@@ -3,11 +3,42 @@ use crate::domain::account::AccountStore;
 use crate::domain::codex_models::*;
 use crate::error::CodexError;
 use chrono::Utc;
-use futures::stream::{self, StreamExt, TryStreamExt};
+use futures::stream::{self, StreamExt};
 use serde::de::Error as _;
+use serde::Deserialize;
 use serde_json::Value;
 
-const USAGE_API_URL: &str = "https://api.openai.com/v1/usage";
+const USAGE_API_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+
+#[derive(Debug, Clone, Deserialize)]
+struct WhamWindowInfo {
+    #[serde(rename = "used_percent")]
+    used_percent: Option<i32>,
+    #[serde(rename = "limit_window_seconds")]
+    limit_window_seconds: Option<i64>,
+    #[serde(rename = "reset_after_seconds")]
+    reset_after_seconds: Option<i64>,
+    #[serde(rename = "reset_at")]
+    reset_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct WhamRateLimitInfo {
+    #[serde(rename = "primary_window")]
+    primary_window: Option<WhamWindowInfo>,
+    #[serde(rename = "secondary_window")]
+    secondary_window: Option<WhamWindowInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct WhamUsageResponse {
+    #[serde(rename = "plan_type")]
+    plan_type: Option<String>,
+    #[serde(rename = "rate_limit")]
+    rate_limit: Option<WhamRateLimitInfo>,
+    #[serde(rename = "code_review_rate_limit")]
+    code_review_rate_limit: Option<WhamRateLimitInfo>,
+}
 
 pub struct QuotaService;
 
@@ -19,6 +50,10 @@ impl QuotaService {
         let root: Value = serde_json::from_str(raw_json).map_err(|e| {
             CodexError::Json(serde_json::Error::custom(format!("Usage parse: {e}")))
         })?;
+
+        if root.get("rate_limit").is_some() || root.get("code_review_rate_limit").is_some() {
+            return Self::parse_wham_usage_response(root, account_id);
+        }
 
         let plan_type = root
             .get("plan_type")
@@ -65,7 +100,20 @@ impl QuotaService {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
+        let (hourly_percentage, hourly_reset_time, hourly_window_minutes, hourly_window_present) =
+            Self::legacy_window_summary(&windows, "primary");
+        let (weekly_percentage, weekly_reset_time, weekly_window_minutes, weekly_window_present) =
+            Self::legacy_window_summary(&windows, "secondary");
+
         Ok(CodexQuota {
+            hourly_percentage,
+            hourly_reset_time,
+            hourly_window_minutes,
+            hourly_window_present,
+            weekly_percentage,
+            weekly_reset_time,
+            weekly_window_minutes,
+            weekly_window_present,
             account_id: resp_account_id.or(Some(account_id.to_string())),
             plan_type,
             windows,
@@ -73,6 +121,70 @@ impl QuotaService {
             error,
             retry_after_ms,
             raw_data,
+        })
+    }
+
+    fn parse_wham_usage_response(root: Value, account_id: &str) -> Result<CodexQuota, CodexError> {
+        let usage: WhamUsageResponse = serde_json::from_value(root.clone()).map_err(|e| {
+            CodexError::Json(serde_json::Error::custom(format!("WHAM usage parse: {e}")))
+        })?;
+
+        let primary = usage
+            .rate_limit
+            .as_ref()
+            .and_then(|r| r.primary_window.as_ref());
+        let secondary = usage
+            .rate_limit
+            .as_ref()
+            .and_then(|r| r.secondary_window.as_ref());
+
+        let (hourly_percentage, hourly_reset_time, hourly_window_minutes) =
+            Self::wham_window_summary(primary);
+        let (weekly_percentage, weekly_reset_time, weekly_window_minutes) =
+            Self::wham_window_summary(secondary);
+
+        let mut windows = Vec::new();
+        if let Some(primary) = primary {
+            windows.push(Self::wham_window_to_legacy(
+                "primary",
+                "hourly",
+                primary,
+                hourly_percentage,
+            ));
+        }
+        if let Some(secondary) = secondary {
+            windows.push(Self::wham_window_to_legacy(
+                "secondary",
+                "weekly",
+                secondary,
+                weekly_percentage,
+            ));
+        }
+
+        let code_review_quota = usage
+            .code_review_rate_limit
+            .as_ref()
+            .and_then(|r| r.primary_window.as_ref().or(r.secondary_window.as_ref()))
+            .map(|w| {
+                let remaining = Self::normalize_remaining_percentage(w);
+                Self::wham_window_to_legacy("code_review", "code_review", w, remaining)
+            });
+
+        Ok(CodexQuota {
+            hourly_percentage,
+            hourly_reset_time,
+            hourly_window_minutes,
+            hourly_window_present: Some(primary.is_some()),
+            weekly_percentage,
+            weekly_reset_time,
+            weekly_window_minutes,
+            weekly_window_present: Some(secondary.is_some()),
+            account_id: Some(account_id.to_string()),
+            plan_type: usage.plan_type,
+            windows,
+            code_review_quota,
+            raw_data: Some(root),
+            ..CodexQuota::default()
         })
     }
 
@@ -111,6 +223,85 @@ impl QuotaService {
         })
     }
 
+    fn legacy_window_summary(
+        windows: &[CodexQuotaWindow],
+        window_type: &str,
+    ) -> (i32, Option<i64>, Option<i64>, Option<bool>) {
+        let Some(window) = windows
+            .iter()
+            .find(|w| w.window_type.as_deref() == Some(window_type))
+        else {
+            return (100, None, None, Some(false));
+        };
+
+        let remaining = (100.0 - window.percentage).round().clamp(0.0, 100.0) as i32;
+        let reset = window
+            .reset_at
+            .as_deref()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.timestamp());
+
+        (remaining, reset, None, Some(true))
+    }
+
+    fn wham_window_summary(window: Option<&WhamWindowInfo>) -> (i32, Option<i64>, Option<i64>) {
+        match window {
+            Some(window) => (
+                Self::normalize_remaining_percentage(window),
+                Self::normalize_reset_time(window),
+                Self::normalize_window_minutes(window),
+            ),
+            None => (100, None, None),
+        }
+    }
+
+    fn normalize_remaining_percentage(window: &WhamWindowInfo) -> i32 {
+        100 - window.used_percent.unwrap_or(0).clamp(0, 100)
+    }
+
+    fn normalize_window_minutes(window: &WhamWindowInfo) -> Option<i64> {
+        let seconds = window.limit_window_seconds?;
+        if seconds <= 0 {
+            return None;
+        }
+        Some((seconds + 59) / 60)
+    }
+
+    fn normalize_reset_time(window: &WhamWindowInfo) -> Option<i64> {
+        if let Some(reset_at) = window.reset_at {
+            return Some(reset_at);
+        }
+
+        let reset_after_seconds = window.reset_after_seconds?;
+        if reset_after_seconds < 0 {
+            return None;
+        }
+
+        Some(Utc::now().timestamp() + reset_after_seconds)
+    }
+
+    fn wham_window_to_legacy(
+        window_type: &str,
+        label: &str,
+        window: &WhamWindowInfo,
+        remaining_percentage: i32,
+    ) -> CodexQuotaWindow {
+        let used_percent = window.used_percent.unwrap_or(0).clamp(0, 100);
+        CodexQuotaWindow {
+            window_type: Some(window_type.to_string()),
+            limit: 100,
+            used: used_percent as u64,
+            percentage: remaining_percentage as f64,
+            reset_at: Self::normalize_reset_time(window).map(|ts| {
+                chrono::DateTime::from_timestamp(ts, 0)
+                    .unwrap_or_default()
+                    .to_rfc3339()
+            }),
+            label: Some(label.to_string()),
+            presence: true,
+        }
+    }
+
     pub async fn refresh_current_quota(
         store: &AccountStore,
         http_client: &HttpClient,
@@ -121,7 +312,9 @@ impl QuotaService {
         };
 
         if account.is_api_key() {
-            return Ok(None);
+            return Err(CodexError::Quota(
+                "API key accounts do not support quota refresh".into(),
+            ));
         }
 
         let access_token =
@@ -129,10 +322,9 @@ impl QuotaService {
                 CodexError::InvalidState("No access token for OAuth account".into())
             })?;
 
-        let today = Utc::now().format("%Y-%m-%d").to_string();
-        let url = format!("{}?date={}", USAGE_API_URL, today);
-
-        let body = http_client.get_usage(&url, access_token).await?;
+        let body = http_client
+            .get_usage_for_account(USAGE_API_URL, access_token, account.account_id.as_deref())
+            .await?;
         let quota = Self::parse_usage_response(&body, &account.id)?;
 
         store.update_account_quota(&account.id, quota.clone())?;
@@ -144,7 +336,7 @@ impl QuotaService {
         store: &AccountStore,
         http_client: &HttpClient,
         concurrency: usize,
-    ) -> Result<Vec<CodexQuota>, CodexError> {
+    ) -> Result<Vec<(String, Result<CodexQuota, String>)>, CodexError> {
         let accounts = store.list_accounts()?;
         let oauth_accounts: Vec<CodexAccount> = accounts
             .into_iter()
@@ -155,38 +347,39 @@ impl QuotaService {
             return Ok(vec![]);
         }
 
-        let today = Utc::now().format("%Y-%m-%d").to_string();
-        let url = format!("{}?date={}", USAGE_API_URL, today);
-
-        let results: Vec<(String, CodexQuota)> = stream::iter(oauth_accounts)
+        let concurrency = concurrency.max(1);
+        let results: Vec<(String, Result<CodexQuota, String>)> = stream::iter(oauth_accounts)
             .map(|account| {
-                let url = url.clone();
                 let token = account.tokens.access_token.clone().unwrap_or_default();
+                let chatgpt_account_id = account.account_id.clone();
                 async move {
-                    let body = http_client
-                        .get_usage(&url, &token)
-                        .await
-                        .map_err(|e| (account.id.clone(), e))?;
-                    let quota = QuotaService::parse_usage_response(&body, &account.id)
-                        .map_err(|e| (account.id.clone(), e))?;
-                    Ok::<(String, CodexQuota), (String, CodexError)>((account.id, quota))
+                    let result = async {
+                        let body = http_client
+                            .get_usage_for_account(
+                                USAGE_API_URL,
+                                &token,
+                                chatgpt_account_id.as_deref(),
+                            )
+                            .await?;
+                        QuotaService::parse_usage_response(&body, &account.id)
+                    }
+                    .await
+                    .map_err(|e: CodexError| e.to_string());
+
+                    (account.id, result)
                 }
             })
             .buffer_unordered(concurrency)
-            .try_collect::<Vec<_>>()
-            .await
-            .map_err(|(account_id, err): (String, CodexError)| {
-                CodexError::Quota(format!(
-                    "Failed to refresh quota for {}: {}",
-                    account_id, err
-                ))
-            })?;
+            .collect()
+            .await;
 
-        for (account_id, quota) in &results {
-            store.update_account_quota(account_id, (*quota).clone())?;
+        for (account_id, result) in &results {
+            if let Ok(quota) = result {
+                store.update_account_quota(account_id, quota.clone())?;
+            }
         }
 
-        Ok(results.into_iter().map(|(_, q)| q).collect())
+        Ok(results)
     }
 
     pub fn pick_auto_switch_target(
@@ -219,6 +412,11 @@ impl QuotaService {
     }
 
     pub fn check_quota_alert(quota: &CodexQuota, primary_threshold: f64) -> bool {
+        if quota.hourly_window_present == Some(true) || quota.weekly_window_present == Some(true) {
+            return quota.hourly_percentage as f64 <= primary_threshold
+                || quota.weekly_percentage as f64 <= primary_threshold;
+        }
+
         for window in &quota.windows {
             if window.window_type.as_deref() == Some("primary") {
                 return window.percentage > primary_threshold;
@@ -425,6 +623,7 @@ mod tests {
                     error: None,
                     retry_after_ms: None,
                     raw_data: None,
+                    ..CodexQuota::default()
                 },
             )
             .expect("quota1");
@@ -448,6 +647,7 @@ mod tests {
                     error: None,
                     retry_after_ms: None,
                     raw_data: None,
+                    ..CodexQuota::default()
                 },
             )
             .expect("quota2");
@@ -471,6 +671,7 @@ mod tests {
                     error: None,
                     retry_after_ms: None,
                     raw_data: None,
+                    ..CodexQuota::default()
                 },
             )
             .expect("quota3");
@@ -502,6 +703,7 @@ mod tests {
             error: None,
             retry_after_ms: None,
             raw_data: None,
+            ..CodexQuota::default()
         };
 
         assert!(QuotaService::check_quota_alert(&quota, 80.0));
@@ -528,6 +730,7 @@ mod tests {
             error: None,
             retry_after_ms: None,
             raw_data: None,
+            ..CodexQuota::default()
         };
 
         assert!(QuotaService::check_quota_alert(&quota, 10.0));
@@ -552,6 +755,7 @@ mod tests {
             error: None,
             retry_after_ms: None,
             raw_data: None,
+            ..CodexQuota::default()
         };
 
         assert!(!QuotaService::check_quota_alert(&quota, 80.0));
@@ -586,6 +790,7 @@ mod tests {
                     error: None,
                     retry_after_ms: None,
                     raw_data: None,
+                    ..CodexQuota::default()
                 },
             )
             .expect("quota oauth");

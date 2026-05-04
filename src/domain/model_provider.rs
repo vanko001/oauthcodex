@@ -45,6 +45,13 @@ impl ModelProviderStore {
     }
 
     pub fn add_provider(&mut self, provider: CodexModelProvider) -> Result<(), CodexError> {
+        if self.find_by_id(&provider.id).is_some() {
+            return Err(CodexError::AlreadyExists(format!(
+                "Provider {} already exists",
+                provider.id
+            )));
+        }
+
         if self.find_by_base_url(&provider.base_url).is_some() {
             return Err(CodexError::AlreadyExists(format!(
                 "Provider with base URL {} already exists",
@@ -213,6 +220,16 @@ mod tests {
             .add_provider(sample_provider("cmp_a", "A", "https://test.com/v1"))
             .unwrap();
         let result = store.add_provider(sample_provider("cmp_b", "B", "https://test.com/v1"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_duplicate_provider_id_rejected() {
+        let mut store = ModelProviderStore::new();
+        store
+            .add_provider(sample_provider("cmp_same", "A", "https://a.com/v1"))
+            .unwrap();
+        let result = store.add_provider(sample_provider("cmp_same", "B", "https://b.com/v1"));
         assert!(result.is_err());
     }
 

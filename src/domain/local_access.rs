@@ -26,7 +26,7 @@ impl LocalAccessService {
                     port: 0,
                     enabled: false,
                     local_api_key: Self::generate_local_api_key(),
-                    restrict_free_accounts: false,
+                    restrict_free_accounts: true,
                     routing_strategy: RoutingStrategy::Auto,
                     created_at: Some(Utc::now().to_rfc3339()),
                     updated_at: None,
@@ -34,25 +34,7 @@ impl LocalAccessService {
                 write_json_atomic(&self.paths.codex_local_access_file, &default)?;
                 Ok(default)
             }
-            Err(e) => {
-                if let CodexError::Json(_) = &e {
-                    let default = LocalAccessCollection {
-                        version: DEFAULT_VERSION,
-                        accounts: vec![],
-                        port: 0,
-                        enabled: false,
-                        local_api_key: Self::generate_local_api_key(),
-                        restrict_free_accounts: false,
-                        routing_strategy: RoutingStrategy::Auto,
-                        created_at: Some(Utc::now().to_rfc3339()),
-                        updated_at: None,
-                    };
-                    write_json_atomic(&self.paths.codex_local_access_file, &default)?;
-                    Ok(default)
-                } else {
-                    Err(e)
-                }
-            }
+            Err(e) => Err(e),
         }
     }
 
@@ -146,27 +128,32 @@ impl LocalAccessService {
                     let age = now.signed_duration_since(event_time);
                     let is_success = event.status >= 200 && event.status < 300;
 
-                    let window = if age.num_hours() < 24 {
-                        Some(&mut daily)
-                    } else if age.num_days() < 7 {
-                        Some(&mut weekly)
-                    } else if age.num_days() < 30 {
-                        Some(&mut monthly)
-                    } else {
-                        None
-                    };
-
-                    if let Some(w) = window {
-                        w.requests += 1;
-                        if is_success {
-                            w.successes += 1;
-                        } else {
-                            w.failures += 1;
-                        }
-                        w.tokens_in += event.tokens_in;
-                        w.tokens_out += event.tokens_out;
-                        w.latency_ms_sum += event.latency_ms;
+                    if age.num_days() < 30 {
+                        apply_stats_event(&mut monthly, event, is_success);
                     }
+                    if age.num_days() < 7 {
+                        apply_stats_event(&mut weekly, event, is_success);
+                    }
+                    if age.num_hours() < 24 {
+                        apply_stats_event(&mut daily, event, is_success);
+                    }
+                }
+
+                fn apply_stats_event(
+                    window: &mut LocalAccessStatsWindow,
+                    event: &LocalAccessStatsEvent,
+                    is_success: bool,
+                ) {
+                    let w = window;
+                    w.requests += 1;
+                    if is_success {
+                        w.successes += 1;
+                    } else {
+                        w.failures += 1;
+                    }
+                    w.tokens_in += event.tokens_in;
+                    w.tokens_out += event.tokens_out;
+                    w.latency_ms_sum += event.latency_ms;
                 }
 
                 Some(LocalAccessStatsSnapshot {
@@ -340,11 +327,24 @@ mod tests {
         assert_eq!(collection.port, 0);
         assert!(!collection.enabled);
         assert!(collection.local_api_key.starts_with("sk-local-"));
-        assert!(!collection.restrict_free_accounts);
+        assert!(collection.restrict_free_accounts);
         assert_eq!(collection.routing_strategy, RoutingStrategy::Auto);
 
         let loaded = svc.load_collection().unwrap();
         assert_eq!(collection.local_api_key, loaded.local_api_key);
+    }
+
+    #[test]
+    fn test_invalid_collection_json_returns_error() {
+        let tmp = TempDir::new().unwrap();
+        let paths = CodexPaths::for_tests(tmp.path());
+        std::fs::create_dir_all(&paths.cockpit_dir).unwrap();
+        std::fs::write(&paths.codex_local_access_file, "{invalid").unwrap();
+        let svc = LocalAccessService::new(paths);
+
+        let result = svc.load_collection();
+
+        assert!(result.is_err());
     }
 
     #[test]
@@ -505,6 +505,33 @@ mod tests {
                 .unwrap();
         assert_eq!(stats.requests.len(), 1);
         assert_eq!(stats.requests[0].model, "gpt-4o");
+    }
+
+    #[test]
+    fn test_stats_windows_are_cumulative() {
+        let tmp = TempDir::new().unwrap();
+        let (svc, collection) = setup(&tmp);
+
+        svc.record_request(LocalAccessStatsEvent {
+            timestamp: Utc::now().to_rfc3339(),
+            account_id: "acct_test".to_string(),
+            model: "gpt-4o".to_string(),
+            status: 200,
+            latency_ms: 100,
+            tokens_in: 10,
+            tokens_out: 20,
+            is_stream: false,
+        })
+        .unwrap();
+
+        let snapshot = svc
+            .get_state_snapshot(&collection, false)
+            .stats
+            .expect("stats");
+
+        assert_eq!(snapshot.daily.requests, 1);
+        assert_eq!(snapshot.weekly.requests, 1);
+        assert_eq!(snapshot.monthly.requests, 1);
     }
 
     #[test]

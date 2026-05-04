@@ -78,28 +78,6 @@ mod tests {
 
         emitter.emit(OAuthEvent::LoginCompleted {
             login_id: "test_login".to_string(),
-            account: Box::new(crate::domain::codex_models::CodexAccount {
-                id: "test".into(),
-                provider: "codex".into(),
-                auth_mode: crate::domain::codex_models::CodexAuthMode::OAuth,
-                email: None,
-                plan_type: None,
-                account_id: None,
-                organization_id: None,
-                organizations: vec![],
-                display_name: "test".into(),
-                tags: vec![],
-                tokens: crate::domain::codex_models::CodexTokens::empty(),
-                api_key: None,
-                base_url: None,
-                provider_id: None,
-                provider_name: None,
-                api_provider_mode: None,
-                quota: None,
-                created_at: None,
-                last_used: None,
-                last_refresh: None,
-            }),
         });
 
         assert!(*called.lock().unwrap());

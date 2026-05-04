@@ -118,8 +118,18 @@ impl ConfigStore {
         if let Some(v) = config.codex_auto_switch_secondary_threshold {
             doc["codex_auto_switch_secondary_threshold"] = toml_edit::value(v as i64);
         }
+        if let Some(ref v) = config.codex_auto_switch_account_scope_mode {
+            doc["codex_auto_switch_account_scope_mode"] = toml_edit::value(v.as_str());
+        }
+        if let Some(ref v) = config.codex_auto_switch_selected_account_ids {
+            doc["codex_auto_switch_selected_account_ids"] =
+                toml_edit::value(string_array(v.iter().map(String::as_str)));
+        }
         if let Some(v) = config.codex_quota_alert_enabled {
             doc["codex_quota_alert_enabled"] = toml_edit::value(v);
+        }
+        if let Some(v) = config.codex_quota_alert_threshold {
+            doc["codex_quota_alert_threshold"] = toml_edit::value(v as i64);
         }
         if let Some(v) = config.codex_quota_alert_primary_threshold {
             doc["codex_quota_alert_primary_threshold"] = toml_edit::value(v as i64);
@@ -149,6 +159,13 @@ impl ConfigStore {
                 serde_json::Value::Bool(b) => {
                     doc[k.as_str()] = toml_edit::value(*b);
                 }
+                serde_json::Value::Array(items) => {
+                    if items.iter().all(|item| item.is_string()) {
+                        doc[k.as_str()] = toml_edit::value(string_array(
+                            items.iter().filter_map(|item| item.as_str()),
+                        ));
+                    }
+                }
                 _ => {}
             }
         }
@@ -169,7 +186,10 @@ impl ConfigStore {
             "codex_auto_switch_enabled",
             "codex_auto_switch_primary_threshold",
             "codex_auto_switch_secondary_threshold",
+            "codex_auto_switch_account_scope_mode",
+            "codex_auto_switch_selected_account_ids",
             "codex_quota_alert_enabled",
+            "codex_quota_alert_threshold",
             "codex_quota_alert_primary_threshold",
             "codex_quota_alert_secondary_threshold",
             "codex_quota_alert_cooldown_minutes",
@@ -219,6 +239,12 @@ impl ConfigStore {
         config.codex_auto_switch_enabled = Some(enabled);
         config.codex_auto_switch_primary_threshold = primary_threshold.map(|v| v.clamp(0, 100));
         config.codex_auto_switch_secondary_threshold = secondary_threshold.map(|v| v.clamp(0, 100));
+        config
+            .codex_auto_switch_account_scope_mode
+            .get_or_insert_with(|| "all_accounts".to_string());
+        config
+            .codex_auto_switch_selected_account_ids
+            .get_or_insert_with(Vec::new);
         self.save_config(&config)
     }
 
@@ -229,9 +255,18 @@ impl ConfigStore {
     ) -> Result<(), CodexError> {
         let mut config = self.load_config()?;
         config.codex_quota_alert_enabled = Some(enabled);
+        config.codex_quota_alert_threshold = primary_threshold.map(|v| v.clamp(0, 100));
         config.codex_quota_alert_primary_threshold = primary_threshold.map(|v| v.clamp(0, 100));
         self.save_config(&config)
     }
+}
+
+fn string_array<'a>(items: impl IntoIterator<Item = &'a str>) -> toml_edit::Array {
+    let mut array = toml_edit::Array::new();
+    for item in items {
+        array.push(item);
+    }
+    array
 }
 
 #[cfg(test)]
@@ -343,6 +378,10 @@ mod tests {
         assert_eq!(config.codex_auto_switch_enabled, Some(true));
         assert_eq!(config.codex_auto_switch_primary_threshold, Some(80));
         assert_eq!(config.codex_auto_switch_secondary_threshold, Some(20));
+        assert_eq!(
+            config.codex_auto_switch_account_scope_mode.as_deref(),
+            Some("all_accounts")
+        );
     }
 
     #[test]
@@ -364,6 +403,7 @@ mod tests {
             .expect("set quota alert");
         let config = store.load_config().expect("load config");
         assert_eq!(config.codex_quota_alert_enabled, Some(true));
+        assert_eq!(config.codex_quota_alert_threshold, Some(75));
         assert_eq!(config.codex_quota_alert_primary_threshold, Some(75));
     }
 
@@ -374,6 +414,7 @@ mod tests {
             .set_codex_quota_alert(true, Some(150))
             .expect("set quota alert");
         let config = store.load_config().expect("load config");
+        assert_eq!(config.codex_quota_alert_threshold, Some(100));
         assert_eq!(config.codex_quota_alert_primary_threshold, Some(100));
     }
 

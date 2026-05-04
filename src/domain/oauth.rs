@@ -8,7 +8,7 @@ use rand::Rng;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
-const CLIENT_ID: &str = "U2BcmqLqFwsFpMk8T5r5GqVqVBFx5RkP";
+const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTH_ENDPOINT: &str = "https://auth.openai.com/oauth/authorize";
 const TOKEN_ENDPOINT: &str = "https://auth.openai.com/oauth/token";
 const REDIRECT_URI: &str = "http://localhost:1455/auth/callback";
@@ -18,6 +18,7 @@ const ORIGINATOR: &str = "codex_vscode";
 const OAUTH_TIMEOUT_SECS: u64 = 300;
 const CALLBACK_PORT: u16 = 1455;
 
+#[derive(Debug, Clone)]
 pub struct OAuthConfig {
     pub client_id: String,
     pub auth_endpoint: String,
@@ -78,20 +79,31 @@ pub struct OAuthPending {
     pub state: String,
     pub code_verifier: String,
     pub code_challenge: String,
+    pub redirect_uri: String,
+    pub port: u16,
+    pub code: Option<String>,
     pub created_at: String,
     pub expires_at: String,
 }
 
 impl OAuthPending {
     pub fn new() -> Self {
+        Self::new_for_port(CALLBACK_PORT)
+    }
+
+    pub fn new_for_port(port: u16) -> Self {
         let verifier = generate_pkce_verifier();
         let challenge = generate_code_challenge(&verifier);
         let now = Utc::now();
+        let redirect_uri = callback_redirect_uri(port);
         Self {
             login_id: generate_login_id(),
             state: generate_state(),
             code_verifier: verifier,
             code_challenge: challenge,
+            redirect_uri,
+            port,
+            code: None,
             created_at: now.to_rfc3339(),
             expires_at: (now + chrono::Duration::seconds(OAUTH_TIMEOUT_SECS as i64)).to_rfc3339(),
         }
@@ -104,6 +116,10 @@ impl OAuthPending {
             true
         }
     }
+}
+
+fn callback_redirect_uri(port: u16) -> String {
+    format!("http://localhost:{port}/auth/callback")
 }
 
 impl Default for OAuthPending {
@@ -141,20 +157,10 @@ fn url_encode(s: &str) -> String {
 
 #[derive(Debug, Clone)]
 pub enum OAuthEvent {
-    LoginCompleted {
-        login_id: String,
-        account: Box<CodexAccount>,
-    },
-    LoginTimeout {
-        login_id: String,
-    },
-    LoginCancelled {
-        login_id: String,
-    },
-    LoginError {
-        login_id: String,
-        error: String,
-    },
+    LoginCompleted { login_id: String },
+    LoginTimeout { login_id: String },
+    LoginCancelled { login_id: String },
+    LoginError { login_id: String, error: String },
 }
 
 impl OAuthEvent {
@@ -208,20 +214,25 @@ impl OAuthService {
 
         let existing = self.load_pending()?;
         let pending: OAuthPending = if let Some(ref existing_pending) = existing {
-            if !existing_pending.is_expired() {
+            if !existing_pending.is_expired() && existing_pending.port == callback_port {
                 existing_pending.clone()
             } else {
-                let new_pending = OAuthPending::new();
+                let new_pending = OAuthPending::new_for_port(callback_port);
                 self.save_pending(&new_pending)?;
                 new_pending
             }
         } else {
-            let new_pending = OAuthPending::new();
+            let new_pending = OAuthPending::new_for_port(callback_port);
             self.save_pending(&new_pending)?;
             new_pending
         };
 
-        let auth_url = build_auth_url(&self.config, &pending);
+        let request_config = OAuthConfig {
+            redirect_uri: pending.redirect_uri.clone(),
+            callback_port,
+            ..self.config.clone()
+        };
+        let auth_url = build_auth_url(&request_config, &pending);
         let code_verifier = pending.code_verifier.clone();
 
         {
@@ -319,7 +330,11 @@ impl OAuthService {
             )));
         }
 
-        self.complete_oauth_login(callback_pairs, &pending)
+        let result = self.complete_oauth_login(callback_pairs, &pending);
+        if result.is_ok() {
+            self.clear_pending()?;
+        }
+        result
     }
 
     pub fn cancel_login(&self, login_id: &str) -> Result<(), CodexError> {
@@ -346,6 +361,9 @@ impl OAuthService {
             state: pending.state.clone(),
             code_verifier: pending.code_verifier.clone(),
             code_challenge: pending.code_challenge.clone(),
+            redirect_uri: Some(pending.redirect_uri.clone()),
+            port: Some(pending.port),
+            code: pending.code.clone(),
             created_at: Some(pending.created_at.clone()),
             expires_at: Some(pending.expires_at.clone()),
         };
@@ -360,6 +378,11 @@ impl OAuthService {
             state: s.state,
             code_verifier: s.code_verifier,
             code_challenge: s.code_challenge,
+            redirect_uri: s
+                .redirect_uri
+                .unwrap_or_else(|| callback_redirect_uri(s.port.unwrap_or(CALLBACK_PORT))),
+            port: s.port.unwrap_or(CALLBACK_PORT),
+            code: s.code,
             created_at: s.created_at.unwrap_or_default(),
             expires_at: s.expires_at.unwrap_or_default(),
         }))

@@ -4,8 +4,12 @@ use crate::adapters::fs_store::{
 use crate::domain::codex_models::*;
 use crate::error::CodexError;
 use std::path::Path;
+use std::sync::{Arc, LazyLock, Mutex};
 
 const DEFAULT_VERSION: u32 = 1;
+static TOKEN_REFRESH_LOCKS: LazyLock<
+    Mutex<std::collections::HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+> = LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
 
 pub struct AccountStore {
     pub paths: CodexPaths,
@@ -18,6 +22,16 @@ impl AccountStore {
 
     pub fn ensure_dirs(&self) -> Result<(), CodexError> {
         self.paths.ensure_dirs()
+    }
+
+    pub fn token_refresh_lock_for(account_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = TOKEN_REFRESH_LOCKS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        locks
+            .entry(account_id.to_string())
+            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+            .clone()
     }
 
     pub fn load_index(&self) -> Result<CodexAccountIndex, CodexError> {
@@ -742,6 +756,16 @@ mod tests {
     }
 
     #[test]
+    fn test_token_refresh_lock_is_per_account() {
+        let a1 = AccountStore::token_refresh_lock_for("acct_a");
+        let a2 = AccountStore::token_refresh_lock_for("acct_a");
+        let b = AccountStore::token_refresh_lock_for("acct_b");
+
+        assert!(Arc::ptr_eq(&a1, &a2));
+        assert!(!Arc::ptr_eq(&a1, &b));
+    }
+
+    #[test]
     fn test_update_tags() {
         let (store, _tmp) = setup_test_store();
         store
@@ -781,6 +805,7 @@ mod tests {
             error: None,
             retry_after_ms: None,
             raw_data: None,
+            ..CodexQuota::default()
         };
         store
             .update_account_quota("test_001", quota)

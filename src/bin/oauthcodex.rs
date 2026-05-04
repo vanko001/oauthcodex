@@ -5,17 +5,15 @@ use oauthcodex::domain::oauth::OAuthService;
 use oauthcodex::domain::wakeup::WakeupScheduler;
 use oauthcodex::error::CodexError;
 use serde_json::json;
-use tempfile::TempDir;
 
-fn setup_paths(tmp: &TempDir) -> CodexPaths {
-    let paths = CodexPaths::for_tests(tmp.path());
-    paths.ensure_dirs().unwrap();
-    paths
+fn runtime_paths() -> Result<CodexPaths, CodexError> {
+    let paths = CodexPaths::new()?;
+    paths.ensure_dirs()?;
+    Ok(paths)
 }
 
 fn cmd_oauth_start() -> Result<String, CodexError> {
-    let tmp = TempDir::new().unwrap();
-    let paths = setup_paths(&tmp);
+    let paths = runtime_paths()?;
     let svc = OAuthService::new(paths);
     let (url, _, pending) = svc.start_oauth_login(CALLBACK_PORT)?;
     Ok(json!({"auth_url": url, "login_id": pending.login_id, "state": pending.state}).to_string())
@@ -30,19 +28,12 @@ fn cmd_oauth_complete(args: &[String]) -> Result<String, CodexError> {
     let login_id = &args[0];
     let callback_url = &args[1];
 
-    let tmp = TempDir::new().unwrap();
-    let paths = setup_paths(&tmp);
+    let paths = runtime_paths()?;
     let svc = OAuthService::new(paths);
     let (code, state) = svc.parse_manual_callback(callback_url)?;
-    let pending = svc
-        .load_pending()?
-        .ok_or_else(|| CodexError::OAuth("No pending login".into()))?;
-    if pending.login_id != *login_id {
-        return Err(CodexError::OAuth("Login ID mismatch".into()));
-    }
-    svc.complete_oauth_login(
+    svc.complete_oauth_login_for_login(
+        login_id,
         &[("code".to_string(), code), ("state".to_string(), state)],
-        &pending,
     )?;
     Ok(json!({"status": "completed", "login_id": login_id}).to_string())
 }
@@ -51,16 +42,14 @@ fn cmd_oauth_cancel(args: &[String]) -> Result<String, CodexError> {
     let login_id = args
         .first()
         .ok_or_else(|| CodexError::InvalidState("Usage: oauth cancel <login_id>".into()))?;
-    let tmp = TempDir::new().unwrap();
-    let paths = setup_paths(&tmp);
+    let paths = runtime_paths()?;
     let svc = OAuthService::new(paths);
     svc.cancel_login(login_id)?;
     Ok(json!({"status": "cancelled"}).to_string())
 }
 
 fn cmd_account_list() -> Result<String, CodexError> {
-    let tmp = TempDir::new().unwrap();
-    let paths = setup_paths(&tmp);
+    let paths = runtime_paths()?;
     let store = AccountStore::new(paths);
     let accounts = store.list_accounts()?;
     Ok(serde_json::to_string_pretty(&accounts).unwrap_or_default())
@@ -70,16 +59,14 @@ fn cmd_account_switch(args: &[String]) -> Result<String, CodexError> {
     let account_id = args
         .first()
         .ok_or_else(|| CodexError::InvalidState("Usage: account switch <account_id>".into()))?;
-    let tmp = TempDir::new().unwrap();
-    let paths = setup_paths(&tmp);
+    let paths = runtime_paths()?;
     let store = AccountStore::new(paths);
     store.switch_account_managed(account_id)?;
     Ok(json!({"status": "switched", "account_id": account_id}).to_string())
 }
 
 fn cmd_quota_refresh() -> Result<String, CodexError> {
-    let tmp = TempDir::new().unwrap();
-    let paths = setup_paths(&tmp);
+    let paths = runtime_paths()?;
     let store = AccountStore::new(paths);
     let current_id = store.get_current_account_id()?;
     match current_id {
@@ -89,8 +76,7 @@ fn cmd_quota_refresh() -> Result<String, CodexError> {
 }
 
 fn cmd_local_access_state() -> Result<String, CodexError> {
-    let tmp = TempDir::new().unwrap();
-    let paths = setup_paths(&tmp);
+    let paths = runtime_paths()?;
     let svc = LocalAccessService::new(paths);
     let collection = svc.load_collection()?;
     let snapshot = svc.get_state_snapshot(&collection, false);

@@ -131,6 +131,50 @@ fn test_parse_usage_exhausted() {
 }
 
 #[test]
+fn test_parse_wham_usage_response_shape() {
+    let raw = r#"{
+      "plan_type": "pro",
+      "rate_limit": {
+        "primary_window": {
+          "used_percent": 35,
+          "limit_window_seconds": 18000,
+          "reset_at": 1770000000
+        },
+        "secondary_window": {
+          "used_percent": 80,
+          "limit_window_seconds": 604800,
+          "reset_after_seconds": 3600
+        }
+      },
+      "code_review_rate_limit": {
+        "primary_window": {
+          "used_percent": 10,
+          "limit_window_seconds": 18000,
+          "reset_at": 1770000100
+        }
+      }
+    }"#;
+
+    let quota = QuotaService::parse_usage_response(raw, "acct_local_001").expect("parse");
+
+    assert_eq!(quota.account_id, Some("acct_local_001".into()));
+    assert_eq!(quota.plan_type, Some("pro".into()));
+    assert_eq!(quota.hourly_percentage, 65);
+    assert_eq!(quota.hourly_reset_time, Some(1770000000));
+    assert_eq!(quota.hourly_window_minutes, Some(300));
+    assert_eq!(quota.hourly_window_present, Some(true));
+    assert_eq!(quota.weekly_percentage, 20);
+    assert_eq!(quota.weekly_window_minutes, Some(10080));
+    assert_eq!(quota.weekly_window_present, Some(true));
+    assert!(quota.weekly_reset_time.is_some());
+    assert!(quota.raw_data.is_some());
+
+    let review = quota.code_review_quota.as_ref().expect("code review");
+    assert_eq!(review.window_type.as_deref(), Some("code_review"));
+    assert_eq!(review.percentage, 90.0);
+}
+
+#[test]
 fn test_parse_usage_error_401() {
     let raw = include_str!("fixtures/quota/usage_error_401.json");
     let quota = QuotaService::parse_usage_response(raw, "acct_test").expect("parse");
@@ -215,6 +259,7 @@ fn test_pick_auto_switch_target_three_accounts() {
                 error: None,
                 retry_after_ms: None,
                 raw_data: None,
+                ..CodexQuota::default()
             },
         )
         .expect("quota a");
@@ -238,6 +283,7 @@ fn test_pick_auto_switch_target_three_accounts() {
                 error: None,
                 retry_after_ms: None,
                 raw_data: None,
+                ..CodexQuota::default()
             },
         )
         .expect("quota b");
@@ -261,6 +307,7 @@ fn test_pick_auto_switch_target_three_accounts() {
                 error: None,
                 retry_after_ms: None,
                 raw_data: None,
+                ..CodexQuota::default()
             },
         )
         .expect("quota c");
@@ -289,6 +336,7 @@ fn test_quota_alert_threshold() {
         error: None,
         retry_after_ms: None,
         raw_data: None,
+        ..CodexQuota::default()
     };
 
     assert!(QuotaService::check_quota_alert(&quota, 80.0));

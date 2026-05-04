@@ -36,6 +36,47 @@ impl InstanceStore {
         }
     }
 
+    pub fn import_ref(&mut self, instance_ref: CodexInstanceStoreRef) -> Result<(), CodexError> {
+        if self.find_by_id(&instance_ref.id).is_some() {
+            return Err(CodexError::AlreadyExists(format!(
+                "Instance {} already exists",
+                instance_ref.id
+            )));
+        }
+
+        if instance_ref.name.trim().is_empty() {
+            return Err(CodexError::Instance("Instance name cannot be empty".into()));
+        }
+
+        if instance_ref.is_default {
+            for instance in &mut self.instances {
+                instance.is_default = false;
+            }
+        }
+
+        let now = chrono::Utc::now().to_rfc3339();
+        let instance = CodexInstance {
+            id: instance_ref.id,
+            name: instance_ref.name,
+            is_default: instance_ref.is_default,
+            working_dir: None,
+            auth_mode: None,
+            bound_account_id: None,
+            follow_local_account: true,
+            launch_mode: InstanceLaunchMode::Auto,
+            extra_args: vec![],
+            extra_env: HashMap::new(),
+            enabled: true,
+            created_at: Some(now.clone()),
+            updated_at: Some(now),
+        };
+
+        let idx = self.instances.len();
+        self.instance_index.insert(instance.id.clone(), idx);
+        self.instances.push(instance);
+        Ok(())
+    }
+
     pub fn find_by_id(&self, id: &str) -> Option<&CodexInstance> {
         self.instance_index.get(id).map(|&idx| &self.instances[idx])
     }

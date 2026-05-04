@@ -97,6 +97,18 @@ impl SessionManager {
             .find_by_id(id)
             .ok_or_else(|| CodexError::NotFound(format!("Session not found: {id}")))?;
 
+        if let Some(ref file_path) = session.file_path {
+            if let Some(stats) = token_stats_from_rollout(std::path::Path::new(file_path)) {
+                return Ok(TokenStats {
+                    total_tokens: stats.2,
+                    prompt_tokens: stats.0,
+                    completion_tokens: stats.1,
+                    average_per_message: stats.2.checked_div(session.message_count).unwrap_or(0),
+                    peak_message_tokens: stats.2,
+                });
+            }
+        }
+
         Ok(TokenStats {
             total_tokens: session.token_count,
             prompt_tokens: session.token_count / 2,
@@ -162,18 +174,76 @@ impl SessionManager {
         }
 
         let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H%M%S").to_string();
+        let backup_path = instance_dirs.first().map(|dir| {
+            std::path::Path::new(dir)
+                .join("backups")
+                .join(format!("repair_{timestamp}"))
+                .to_string_lossy()
+                .to_string()
+        });
         let report = VisibilityRepairReport {
             visibility_issues: issues,
             repair_result: VisibilityRepairResult {
                 restored_count: restored,
                 backup_created: true,
-                backup_path: Some(format!("/Users/vanko/.codex/backups/repair_{timestamp}/")),
+                backup_path,
                 errors: vec![],
             },
         };
 
         Ok(report)
     }
+}
+
+fn token_stats_from_rollout(path: &std::path::Path) -> Option<(u64, u64, u64)> {
+    let content = std::fs::read_to_string(path).ok()?;
+    parse_token_stats_lines(&content)
+}
+
+fn parse_token_stats_lines(content: &str) -> Option<(u64, u64, u64)> {
+    for line in content.lines().rev() {
+        let trimmed = line.trim();
+        if trimmed.is_empty()
+            || !trimmed.contains("\"token_count\"")
+            || !trimmed.contains("\"total_token_usage\"")
+        {
+            continue;
+        }
+
+        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+            continue;
+        };
+        if parsed.get("type").and_then(|value| value.as_str()) != Some("event_msg") {
+            continue;
+        }
+        let Some(payload) = parsed.get("payload") else {
+            continue;
+        };
+        if payload.get("type").and_then(|value| value.as_str()) != Some("token_count") {
+            continue;
+        }
+        let Some(usage) = payload
+            .get("info")
+            .and_then(|info| info.get("total_token_usage"))
+        else {
+            continue;
+        };
+        let input = usage
+            .get("input_tokens")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        let output = usage
+            .get("output_tokens")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0);
+        let total = usage
+            .get("total_tokens")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(input + output);
+        return Some((input, output, total));
+    }
+
+    None
 }
 
 impl Default for SessionManager {
@@ -261,6 +331,47 @@ mod tests {
         let stats = mgr.token_stats_for_session("sess_001").unwrap();
         assert_eq!(stats.total_tokens, 250);
         assert!(stats.average_per_message > 0);
+    }
+
+    #[test]
+    fn test_token_stats_reads_rollout_token_count() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let rollout = tmp.path().join("rollout-test.jsonl");
+        std::fs::write(
+            &rollout,
+            r#"{"type":"event_msg","payload":{"type":"message","text":"ignored"}}
+{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"output_tokens":15,"total_tokens":25}}}}"#,
+        )
+        .unwrap();
+
+        let mut session = sample_session("sess_001", "inst_001", false);
+        session.file_path = Some(rollout.to_string_lossy().to_string());
+        let mut mgr = SessionManager::new();
+        mgr.add_session(session).unwrap();
+
+        let stats = mgr.token_stats_for_session("sess_001").unwrap();
+
+        assert_eq!(stats.total_tokens, 25);
+        assert_eq!(stats.prompt_tokens, 10);
+        assert_eq!(stats.completion_tokens, 15);
+    }
+
+    #[test]
+    fn test_repair_visibility_backup_path_uses_instance_dir() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let instance_dir = tmp.path().join("instance");
+        std::fs::create_dir_all(&instance_dir).unwrap();
+        let mgr = SessionManager::new();
+
+        let report = mgr
+            .repair_visibility(&[instance_dir.to_string_lossy().to_string()])
+            .unwrap();
+
+        assert!(report
+            .repair_result
+            .backup_path
+            .as_deref()
+            .is_some_and(|path| path.starts_with(instance_dir.to_string_lossy().as_ref())));
     }
 
     #[test]

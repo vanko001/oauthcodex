@@ -87,8 +87,24 @@ pub struct CodexQuotaErrorInfo {
     pub status_code: Option<u16>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CodexQuota {
+    #[serde(default)]
+    pub hourly_percentage: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hourly_reset_time: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hourly_window_minutes: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hourly_window_present: Option<bool>,
+    #[serde(default)]
+    pub weekly_percentage: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weekly_reset_time: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weekly_window_minutes: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weekly_window_present: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -251,6 +267,7 @@ pub struct CodexAccountGroupList {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodexModelApiKey {
     pub id: String,
+    #[serde(rename = "apiKey", alias = "key")]
     pub key: String,
 }
 
@@ -258,8 +275,9 @@ pub struct CodexModelApiKey {
 pub struct CodexModelProvider {
     pub id: String,
     pub name: String,
+    #[serde(rename = "baseUrl", alias = "base_url")]
     pub base_url: String,
-    #[serde(default)]
+    #[serde(rename = "apiKeys", alias = "api_keys", default)]
     pub api_keys: Vec<CodexModelApiKey>,
 }
 
@@ -275,6 +293,12 @@ pub struct CodexPendingOAuthState {
     pub state: String,
     pub code_verifier: String,
     pub code_challenge: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redirect_uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -589,7 +613,13 @@ pub struct UserConfigCodex {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub codex_auto_switch_secondary_threshold: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub codex_auto_switch_account_scope_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codex_auto_switch_selected_account_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub codex_quota_alert_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codex_quota_alert_threshold: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub codex_quota_alert_primary_threshold: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -614,7 +644,10 @@ impl Default for UserConfigCodex {
             codex_auto_switch_enabled: None,
             codex_auto_switch_primary_threshold: None,
             codex_auto_switch_secondary_threshold: None,
+            codex_auto_switch_account_scope_mode: Some("all_accounts".to_string()),
+            codex_auto_switch_selected_account_ids: Some(vec![]),
             codex_quota_alert_enabled: None,
+            codex_quota_alert_threshold: Some(20),
             codex_quota_alert_primary_threshold: None,
             codex_quota_alert_secondary_threshold: None,
             codex_quota_alert_cooldown_minutes: None,
@@ -808,6 +841,32 @@ mod tests {
         assert_eq!(bundle.export_type, "codex_only");
         assert_eq!(bundle.codex_account_groups.len(), 1);
         assert_eq!(bundle.codex_model_providers.len(), 1);
+    }
+
+    #[test]
+    fn test_model_provider_accepts_source_camel_case_contract() {
+        let data = r#"{
+          "id": "cmp_source",
+          "name": "Source",
+          "baseUrl": "https://example.com/v1",
+          "apiKeys": [
+            {"id": "cmk_1", "name": "Main", "apiKey": "sk-test", "createdAt": 1, "updatedAt": 1}
+          ],
+          "createdAt": 1,
+          "updatedAt": 1
+        }"#;
+
+        let provider: CodexModelProvider = serde_json::from_str(data).expect("parse provider");
+        assert_eq!(provider.base_url, "https://example.com/v1");
+        assert_eq!(provider.api_keys[0].key, "sk-test");
+
+        let serialized = serde_json::to_value(&provider).expect("serialize provider");
+        assert!(serialized.get("baseUrl").is_some());
+        assert!(serialized
+            .get("apiKeys")
+            .and_then(|keys| keys.get(0))
+            .and_then(|key| key.get("apiKey"))
+            .is_some());
     }
 
     #[test]

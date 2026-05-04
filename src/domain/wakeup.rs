@@ -37,6 +37,23 @@ impl WakeupScheduler {
         scheduler
     }
 
+    pub fn replace_state(&mut self, state: Option<WakeupState>) {
+        match state {
+            Some(state) => {
+                self.runtime_config = state.runtime_config;
+                self.tasks = state.tasks;
+            }
+            None => {
+                self.runtime_config = None;
+                self.tasks.clear();
+            }
+        }
+    }
+
+    pub fn set_current_refresh_map(&mut self, map: HashMap<String, i32>) {
+        self.current_refresh_map = map;
+    }
+
     pub fn current_refresh_map(&self) -> HashMap<String, i32> {
         self.current_refresh_map.clone()
     }

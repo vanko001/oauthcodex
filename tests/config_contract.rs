@@ -109,6 +109,14 @@ fn test_set_auto_switch_valid_thresholds() {
     assert_eq!(config.codex_auto_switch_enabled, Some(true));
     assert_eq!(config.codex_auto_switch_primary_threshold, Some(80));
     assert_eq!(config.codex_auto_switch_secondary_threshold, Some(20));
+    assert_eq!(
+        config.codex_auto_switch_account_scope_mode.as_deref(),
+        Some("all_accounts")
+    );
+    assert_eq!(
+        config.codex_auto_switch_selected_account_ids,
+        Some(Vec::<String>::new())
+    );
 }
 
 #[test]
@@ -144,6 +152,7 @@ fn test_set_quota_alert_thresholds() {
         .expect("set alert");
     let config = store.load_config().expect("load config");
     assert_eq!(config.codex_quota_alert_enabled, Some(true));
+    assert_eq!(config.codex_quota_alert_threshold, Some(75));
     assert_eq!(config.codex_quota_alert_primary_threshold, Some(75));
 }
 
@@ -155,7 +164,34 @@ fn test_set_quota_alert_clamping() {
         .set_codex_quota_alert(true, Some(150))
         .expect("set alert");
     let config = store.load_config().expect("load config");
+    assert_eq!(config.codex_quota_alert_threshold, Some(100));
     assert_eq!(config.codex_quota_alert_primary_threshold, Some(100));
+}
+
+#[test]
+fn test_codex_scope_and_legacy_quota_fields_roundtrip() {
+    let tmp = TempDir::new().expect("temp dir");
+    let store = setup(&tmp);
+
+    let config = UserConfigCodex {
+        codex_auto_switch_account_scope_mode: Some("selected_accounts".into()),
+        codex_auto_switch_selected_account_ids: Some(vec!["acct_a".into(), "acct_b".into()]),
+        codex_quota_alert_threshold: Some(30),
+        ..Default::default()
+    };
+
+    store.save_config(&config).expect("save config");
+    let loaded = store.load_config().expect("load config");
+
+    assert_eq!(
+        loaded.codex_auto_switch_account_scope_mode.as_deref(),
+        Some("selected_accounts")
+    );
+    assert_eq!(
+        loaded.codex_auto_switch_selected_account_ids,
+        Some(vec!["acct_a".into(), "acct_b".into()])
+    );
+    assert_eq!(loaded.codex_quota_alert_threshold, Some(30));
 }
 
 #[test]
